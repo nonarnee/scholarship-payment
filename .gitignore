@@ -1,0 +1,84 @@
+# ============================================================
+# 이 저장소는 GitHub Public 이다. 실제 업무자료는 절대 추적하지 않는다.
+# 기본 원칙: 데이터 파일은 모두 차단(deny)하고, 합성 데이터만 예외(allow)로 연다.
+# 최종 방어선은 tools/safety/check_public_safety.py (커밋 전 훅 + 푸시 전 수동 실행).
+# ============================================================
+
+# OS / 에디터
+.DS_Store
+.idea/
+.vscode/
+Thumbs.db
+desktop.ini
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+build/
+dist/
+
+# ---- 실제 업무자료 (비공개 작업 폴더) ----
+samples/
+private/
+real/
+인수인계/
+# 로컬 금지어 목록 등. 공유·커밋 금지
+.safety/
+
+# ---- 데이터 파일은 확장자로 일괄 차단 ----
+*.xlsx
+*.xlsm
+*.xls
+*.xlsb
+*.xltx
+*.csv
+*.tsv
+*.hwp
+*.hwpx
+*.pdf
+*.doc
+*.docx
+*.ppt
+*.pptx
+*.zip
+*.7z
+*.db
+*.sqlite
+*.sqlite3
+*.bak
+*~
+~$*
+
+# ---- 생성 결과·임시·로그 ----
+output/
+out/
+tmp/
+scratch/
+*.log
+diagnostics/
+*.diag.txt
+
+# ---- 환경/비밀값 ----
+.env
+.env.*
+*.pem
+*.key
+*.pfx
+*.p12
+secrets/
+
+# ---- 예외(allow): 합성 데이터와 합성 템플릿만 ----
+# 파일명은 반드시 synthetic_*.xlsx 여야 하며, 위치는 아래 두 곳뿐이다.
+# 커밋 전 검사가 문서 속성(SYNTHETIC-TEST-DATA 표식), 내용 패턴, 로컬 금지어를 확인한다.
+!templates/
+!templates/synthetic_*.xlsx
+!tests/
+!tests/fixtures/
+!tests/fixtures/synthetic/
+!tests/fixtures/synthetic/synthetic_*.xlsx

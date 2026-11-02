@@ -1,0 +1,6 @@
+#!/bin/sh
+# 공개 저장소 반입 전 검사. 설치: sh tools/safety/install-hooks.sh
+ROOT="$(git rev-parse --show-toplevel)"
+PY="$ROOT/.venv/bin/python"
+[ -x "$PY" ] || PY="$(command -v python3)"
+exec "$PY" -I "$ROOT/tools/safety/check_public_safety.py" --staged
