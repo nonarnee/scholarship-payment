@@ -16,6 +16,9 @@
 헤더 중 외부 시스템 고유 식별 문자열은 중립 이름으로 바꾸었다(실제 헤더·상수는 비공개 설정으로 주입한다).
 """
 import argparse
+import io
+import re
+import zipfile
 from pathlib import Path
 
 from openpyxl import Workbook
@@ -55,16 +58,16 @@ def fmt_min(m):
 
 def records(n, id_mode="numeric"):
     banks = [f"가상은행{k:02d}" for k in range(1, 9)]
-    mins = [33 * 60, 14 * 60 + 30, 10 * 60, 32 * 60, 55 * 60 + 18, 20 * 60]
+    mins = [33 * 60, 14 * 60 + 30, 10 * 60, 32 * 60, 55 * 60 + 18, 20 * 60, 5 * 60 + 30, 9 * 60 + 45]
     out = []
     for i in range(1, n + 1):
         m = mins[i % len(mins)]
         sid = f"90{i:06d}" if id_mode == "numeric" else f"00{i:06d}"
         out.append(dict(
-            seq=i, ym="99990901", name=f"가상{i:03d}", sid=sid,
+            seq=i, ym="9999년09월", name=f"가상{i:03d}", sid=sid,
             dept=f"가상학과{i % 7 + 1:02d}", biz=f"000-00-{i:05d}",
             org=f"가상기관{i % 12 + 1:02d}", place=f"가상근로지{i % 12 + 1:02d}",
-            heads=i % 9 + 1, rate=RATE, minutes=m, text=fmt_min(m),
+            heads=i % 11 + 1, rate=RATE, minutes=m, text=fmt_min(m),
             pay=RATE * m // 60, bank=banks[i % len(banks)], acct=f"000-000-{i:06d}",
         ))
     return out
@@ -284,6 +287,34 @@ def build_input(n, id_mode):
     return wb
 
 
+def _inject_empty_strings(path, coords):
+    """저장된 xlsx 의 지정 칸을 '빈 문자열(inlineStr)' 셀로 바꾼다.
+    실제 다운로드 원본은 B·V·X 열과 합계행 일부가 None 이 아니라 빈 문자열이며, openpyxl 은 빈 문자열을 저장하지 않는다."""
+    zin = zipfile.ZipFile(path)
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zout:
+        for item in zin.infolist():
+            data = zin.read(item.filename)
+            if item.filename == "xl/worksheets/sheet1.xml":
+                xml = data.decode("utf-8")
+                for c in coords:
+                    xml, n = re.subn(rf'<c r="{c}"( s="\d+")?(?: t="n")? ?/>',
+                                     lambda m, c=c: f'<c r="{c}"{m.group(1) or ""} t="inlineStr"><is><t></t></is></c>', xml)
+                    if n != 1:
+                        raise RuntimeError(f"빈 문자열 셀 주입 실패: {c}")
+                data = xml.encode("utf-8")
+            zout.writestr(item, data)
+    Path(path).write_bytes(buf.getvalue())
+
+
+def save_input(path, n, id_mode):
+    """입력 형식 합성 파일을 저장한다(실제 원본의 빈 문자열 칸 포함)."""
+    build_input(n, id_mode).save(path)
+    total = 3 + n
+    coords = [f"{c}{r}" for r in range(3, total) for c in "BVX"] + [f"{c}{total}" for c in "ATUVWX"]
+    _inject_empty_strings(path, coords)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--root", default=str(Path(__file__).resolve().parents[2]))
@@ -292,8 +323,8 @@ def main():
     fx = root / "tests" / "fixtures" / "synthetic"
     fx.mkdir(parents=True, exist_ok=True)
     build_template(45).save(root / "templates" / "synthetic_payment_template.xlsx")
-    build_input(45, "numeric").save(fx / "synthetic_monthly_approval_45.xlsx")
-    build_input(3, "text").save(fx / "synthetic_monthly_approval_3_text_ids.xlsx")
+    save_input(fx / "synthetic_monthly_approval_45.xlsx", 45, "numeric")
+    save_input(fx / "synthetic_monthly_approval_3_text_ids.xlsx", 3, "text")
     print("생성 완료: templates/synthetic_payment_template.xlsx, tests/fixtures/synthetic/ 2개")
 
 
