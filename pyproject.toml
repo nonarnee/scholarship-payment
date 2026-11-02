@@ -1,0 +1,17 @@
+[project]
+name = "scholarship-payment"
+version = "0.0.0"
+description = "한국장학재단 월별지급승인 엑셀을 대학 표준 지급명단으로 변환하는 오프라인 도구 (개발 중)"
+requires-python = ">=3.12"
+dependencies = ["openpyxl>=3.1"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-ra"

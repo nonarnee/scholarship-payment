@@ -1,16 +1,17 @@
 # 프로젝트 현황
 
 > 이 문서는 **실제로 실행한 결과**만 기록한다. 추정·희망 사항은 쓰지 않는다. 변경할 때마다 갱신한다(`WORKFLOW.md` §5).
-> 마지막 갱신: 2026-11-02 / 브랜치 `docs/dev-workflow` (PR #1 머지 완료 후 `main` 기준)
+> 마지막 갱신: 2026-11-02 / 브랜치 `feat/domain-models` (`main` = PR #2 머지 기준에서 분기, 이 변경은 아직 커밋 전)
 
 ## 1. 한눈에 보기
 | 항목 | 상태 |
 |---|---|
-| 단계 | **설계·검증·개발 운영 체계 정리 단계.** 제품 기능은 아직 구현하지 않았다 |
-| 변환 엔진(Adapter·모델·Validator·TemplateWriter) | 미착수 |
+| 단계 | **구현 1단계(골격 + 모델·정규화)** 완료 직전. 변환 엔진은 아직 없다 |
+| 모델·정규화(`PaymentRow`/`PaymentBatch`, 시간·식별자·계좌·금액 정규화) | **구현됨**(단위 테스트 184개) |
+| Adapter · Validator · TemplateWriter | 미착수 |
 | GUI / EXE / GitHub Actions | 미착수(승인 전) |
 | 공개 안전 체계 | 구현됨 (검사기, pre-commit 훅, `.gitignore`, 합성 데이터 생성기) |
-| 불변조건 자동 테스트 | **0개** (엔진이 없어 아직 시험 대상 없음) |
+| 불변조건 자동 테스트 | **일부만**: 정규화·모델 단위의 DI-04/07/13/15 (§4). 엔진 단계 불변조건은 아직 0개 |
 | Windows Excel 실검증 | **미수행** |
 | 개발 환경 | Python 3.13.3(목표 3.12 미설치), openpyxl 3.1.5, pytest 9.2.0 |
 
@@ -19,18 +20,23 @@
 |---|---|---|---|
 | 설계 문서 | `docs/` | 작성됨 | 샘플 실측으로 갱신. 일부 미확정(§5) |
 | 공개 안전 검사기 | `tools/safety/check_public_safety.py` | 구현됨 | pytest 9개 통과 |
+| 패키지 골격 | `pyproject.toml`, `src/scholarship_payment/` | 구현됨 | 테스트가 `src`를 import해 실행 |
+| 오류 객체 | `src/scholarship_payment/errors.py` | 구현됨 | 단위 테스트(값 비노출 포함) |
+| 정규화 | `src/scholarship_payment/core/normalize.py` | 구현됨 | 단위 테스트, 변이 검사 |
+| 공통 모델 | `src/scholarship_payment/models/payment.py` | 구현됨 | 단위 테스트, 변이 검사 |
 | pre-commit 훅 | `tools/safety/hooks/pre-commit` | 설치됨(로컬 `core.hooksPath`) | 위반 파일 커밋 차단을 수동 시험 |
 | 로컬 금지어 생성기 | `tools/safety/build_denylist.py` | 구현됨 | 자동 테스트 없음(🔶 수동 실행) |
 | 합성 엑셀 생성기 | `tools/synthetic/make_synthetic.py` | 구현됨 | 생성물이 안전 검사 통과 |
 | 합성 템플릿·fixture | `templates/`, `tests/fixtures/synthetic/` | 생성됨 | 안전 검사 통과 |
 | 템플릿 분석·A/B 실험 | `tools/experiments/` | **탐색 스크립트**(회귀 테스트 아님) | 아래 §3 |
-| 입력 Adapter / 모델 / Validator / Writer | `src/` | **없음** | - |
+| 입력 Adapter / Validator / TemplateWriter | `src/` | **없음** | - |
 
 ## 3. 실제 검증 결과 (2026-11-02 실행)
 | 검증 | 명령 | 결과 |
 |---|---|---|
-| 단위 테스트 | `.venv/bin/python -m pytest -q tests` | 9 passed |
-| 공개 안전 검사(작업트리) | `check_public_safety.py --worktree` | 통과 (27개 파일, 로컬 금지어 적용) |
+| 단위 테스트 | `.venv/bin/python -m pytest -q tests` | **193 passed** (기존 안전 검사기 9 + 신규 184) |
+| 변이 검사(스크래치 복사본에서 일부러 망가뜨림) | 11가지 결함 주입 후 `pytest tests/unit` | 11/11 탐지(처음엔 "합계를 float로 계산" 1건이 통과 → 테스트 보강 후 탐지) |
+| 공개 안전 검사(작업트리) | `check_public_safety.py --worktree` | 통과 (39개 파일, 로컬 금지어 적용) |
 | A/B 실험, 합성 템플릿 | `tools/experiments/exp.py templates/synthetic_payment_template.xlsx …` | 아래 표 |
 
 데이터 행 스타일 불일치 셀 수(분모는 비교 셀 수):
@@ -50,10 +56,10 @@
 `VALIDATION-AND-TESTS.md`의 기준 번호 기준.
 | 구분 | 자동 테스트 | 탐색 스크립트로만 측정 | 미구현 | 수동(Windows Excel 등) |
 |---|---|---|---|---|
-| DI-01~15 (데이터 정합성) | 0 | DI-01·02·04(선행 0 보존)·08·10 일부 | 나머지 전부 | - |
+| DI-01~15 (데이터 정합성) | **부분**: DI-04(정규화 단위), DI-07(시간 파서·왕복), DI-13(오류·repr 값 비노출), DI-15(금액 정수·float 합계 방지), DI-01/03(모델 단위 N=1~1000 정수 합계), DI-14(탐지 helper만) | DI-01·02(출력 교차)·08·10 일부 | 나머지(출력·Validator·Writer 의존 부분 전부) | - |
 | FP-01~12, 14 (서식 보존) | 0 | 전부(합성 템플릿 기준) | - | - |
 | FP-13 (Excel 열기·재계산·인쇄) | - | - | - | **미검증** |
-→ 현재 어떤 불변조건도 회귀 테스트로 보호되지 않는다. 엔진 구현 승인 후 DI/FP 항목을 테스트로 승격하는 것이 첫 과제다.
+→ 서식 보존(FP)과 출력 단계 불변조건은 아직 회귀 테스트로 보호되지 않는다. Adapter·Validator·Writer 구현에서 DI/FP 항목을 테스트로 승격해야 한다.
 
 ## 5. 자동으로 검증할 수 없는 항목 (수동·외부 확인 필요)
 | 항목 | 이유 | 영향 |
@@ -71,6 +77,7 @@ H1 WINS/WRIS 값 vs 수식 · H2 출력 학번 셀 타입 · H3 사업별 상수
 - 로컬 `core.hooksPath` 설정과 `.safety/denylist.local.txt`는 **이 PC에만** 있다. 다른 PC에서는 훅 설치와 금지어 재생성이 필요하다. 훅은 `--no-verify`로 우회된다.
 - 목표 Python 3.12가 아닌 3.13.3으로 개발 중이다(PyInstaller 호환은 빌드 단계에서 확인).
 - `tools/experiments/exp.py`는 템플릿의 시트명·행 번호(5, 50)에 의존한다.
+- **임시 규칙(사용자 확인 필요)**: ① 계좌번호가 숫자 셀이면 BLOCK(선행 0·하이픈 검증 불가) ② 시간 표기는 `N시간`/`N시간M분`(M 0~59, 공백·소수 불허)만 허용 ③ 금액 문자열은 숫자만 허용(쉼표·부호 불허). 실제 데이터에서 이 표기가 아닌 값이 나오면 차단된다 — `OPEN-QUESTIONS.md` M12~M14.
 
 ## 8. 문서 정합성 메모 (2026-11-02 점검)
 - `FIRST-PROMPT.md`의 "이번 요청은 설계만"은 **시작 시점의 범위**다. 현재 범위는 `CLAUDE.md` §6(구현은 명시 승인 후)이 정한다.
@@ -79,4 +86,5 @@ H1 WINS/WRIS 값 vs 수식 · H2 출력 학번 셀 타입 · H3 사업별 상수
 
 ## 9. 다음 단계 후보 (사용자 승인 필요)
 1. 블로커 해소: Windows Excel에서 방식 B 출력 열기(FP-13), 업로드 호환성(H1/H2), 정책 결정(H3·H5).
-2. 승인 시 구현 착수: 모델·정규화 → DaechungAdapter → Validator → 방식 B Writer. 각 단계는 `WORKFLOW.md`의 재현 테스트 → 구현 → 검증 순서를 따르며 DI/FP 항목을 `tests/`로 승격한다.
+2. 구현 2단계(승인 필요): DaechungAdapter(합성 입력, 레이아웃 지문·데이터 행 판별·합계행 대조) → Validator(H5는 임시 BLOCK) → 방식 B Writer. 각 단계는 `WORKFLOW.md` 순서를 따르며 DI/FP 항목을 `tests/`로 승격한다.
+3. 이번 변경(골격·모델·정규화)의 커밋·PR은 사용자 요청 시 진행.
