@@ -14,6 +14,7 @@ from pathlib import Path
 from openpyxl import load_workbook
 
 from scholarship_payment.adapters.base import AdapterResult, InputValidationFailed, SourceTotals
+from scholarship_payment.adapters.source import open_source
 from scholarship_payment.core.normalize import normalize_account, normalize_identifier, parse_amount, parse_hours
 from scholarship_payment.errors import ValidationError
 from scholarship_payment.models.payment import PaymentBatch, PaymentRow
@@ -68,8 +69,8 @@ class DaechungAdapter:
         self.student_id_len = student_id_len
 
     # ------------------------------------------------------------------ 진입점
-    def read(self, path: str | Path) -> AdapterResult:
-        wb = self._open(Path(path))
+    def read(self, path: str | Path, password: str | None = None) -> AdapterResult:
+        wb = self._open(Path(path), password)
         try:
             if SHEET_NAME not in wb.sheetnames:
                 raise InputValidationFailed([ValidationError("SHEET_MISSING", "sheet")])
@@ -83,11 +84,13 @@ class DaechungAdapter:
 
     # ------------------------------------------------------------------ 파일·레이아웃
     @staticmethod
-    def _open(path: Path):
+    def _open(path: Path, password: str | None = None):
         if not path.is_file():
             raise InputValidationFailed([ValidationError("FILE_NOT_FOUND", "file")])
         try:
-            return load_workbook(path, read_only=False, data_only=True)
+            return load_workbook(open_source(path, password), read_only=False, data_only=True)
+        except InputValidationFailed:
+            raise
         except Exception:                                  # 암호·손상·형식 오류. 원인 메시지는 노출하지 않는다.
             raise InputValidationFailed([ValidationError("FILE_UNREADABLE", "file")]) from None
 

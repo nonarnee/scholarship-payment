@@ -38,7 +38,8 @@ class ConvertResult:
 
 
 def convert(program: str, input_path, out_dir, template_path, policy: OutputPolicy = SYNTHETIC_POLICY,
-            base_date: str | None = None, today: date | None = None) -> ConvertResult:
+            base_date: str | None = None, today: date | None = None,
+            password: str | None = None) -> ConvertResult:
     """base_date 미지정 시 기준일은 작성일(today, 기본 오늘) `YYYY.MM.DD` (사용자 결정)."""
     if base_date is None:
         base_date = (today or date.today()).strftime("%Y.%m.%d")
@@ -52,7 +53,7 @@ def convert(program: str, input_path, out_dir, template_path, policy: OutputPoli
     except Exception:
         raise ConversionFailed([ValidationError("TEMPLATE_UNREADABLE", "template")], "template") from None
     try:
-        adapted = adapter_cls().read(input_path)
+        adapted = adapter_cls().read(input_path, password)
     except InputValidationFailed as e:
         raise ConversionFailed(e.errors, "input") from None
     try:
