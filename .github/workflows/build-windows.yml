@@ -33,7 +33,6 @@ jobs:
         run: >
           pyinstaller --noconfirm --onefile --windowed --name ScholarshipPayment
           --paths src --collect-submodules msoffcrypto
-          --add-data "templates/synthetic_payment_template.xlsx;templates"
           packaging/run_gui.py
       - uses: actions/upload-artifact@v4
         with:
