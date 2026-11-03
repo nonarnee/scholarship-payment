@@ -17,6 +17,8 @@ from scholarship_payment.errors import ValidationError, ValidationFailed
 
 PLACEHOLDER = "<입력 필요>"
 KEYS = ("list_title", "wins_work_name", "wris_gub_a", "wris_gub_b", "remit_info", "wris_headers", "excluded_sheets", "file_prefix")
+OPTIONAL_KEYS = ("hourly_rates", "hidden_list_columns")
+_COLUMN_RE = re.compile(r"[A-Q]")
 _TEMPLATE_KEYS = ("list_title", "remit_info")
 _STRING_KEYS = ("list_title", "wins_work_name", "wris_gub_a", "wris_gub_b", "remit_info", "file_prefix")
 _BAD_PREFIX = re.compile(r'[\\/:*?"<>|\x00-\x1f]')
@@ -26,7 +28,12 @@ def policy_to_dict(policy: OutputPolicy) -> dict:
     d = asdict(policy)
     d["wris_headers"] = list(policy.wris_headers)
     d["excluded_sheets"] = list(policy.excluded_sheets)
-    return {k: d[k] for k in KEYS}
+    out = {k: d[k] for k in KEYS}
+    if policy.hourly_rates:
+        out["hourly_rates"] = dict(policy.hourly_rates)
+    if policy.hidden_list_columns:
+        out["hidden_list_columns"] = list(policy.hidden_list_columns)
+    return out
 
 
 def _bad_template(text: str) -> bool:
@@ -53,7 +60,7 @@ def load_policy(path: str | Path) -> OutputPolicy:
         raise ValidationFailed([ValidationError("POLICY_NOT_OBJECT", "file")])
 
     errors: list[ValidationError] = []
-    if set(data) - set(KEYS):
+    if set(data) - set(KEYS) - set(OPTIONAL_KEYS):
         errors.append(ValidationError("POLICY_KEY_UNKNOWN", "keys"))
     for key in KEYS:
         if key not in data:
@@ -76,10 +83,19 @@ def load_policy(path: str | Path) -> OutputPolicy:
                 errors.append(ValidationError("POLICY_TYPE", key))
             elif PLACEHOLDER in value:
                 errors.append(ValidationError("POLICY_PLACEHOLDER", key))
+    rates = data.get("hourly_rates", {})
+    if not isinstance(rates, dict) or not all(
+            isinstance(k, str) and k.strip() and k != PLACEHOLDER and isinstance(v, int) and not isinstance(v, bool) and v > 0
+            for k, v in rates.items()):
+        errors.append(ValidationError("POLICY_TYPE", "hourly_rates"))
+    hidden = data.get("hidden_list_columns", [])
+    if not isinstance(hidden, list) or not all(isinstance(c, str) and _COLUMN_RE.fullmatch(c) for c in hidden) or len(set(hidden)) != len(hidden):
+        errors.append(ValidationError("POLICY_TYPE", "hidden_list_columns"))
     if errors:
         raise ValidationFailed(errors)
     return OutputPolicy(
         list_title=data["list_title"], wins_work_name=data["wins_work_name"], wris_gub_a=data["wris_gub_a"],
         wris_gub_b=data["wris_gub_b"], remit_info=data["remit_info"], wris_headers=tuple(data["wris_headers"]),
         excluded_sheets=tuple(data["excluded_sheets"]), file_prefix=data["file_prefix"],
+        hourly_rates=tuple(rates.items()), hidden_list_columns=tuple(hidden),
     )

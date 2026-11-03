@@ -19,6 +19,12 @@ class OutputPolicy:
                                      "bank_code", "account_no", "depositor", "remit_info", "remark")
     excluded_sheets: tuple[str, ...] = ("업로드 결과(이력)",)               # 출력에서 제거하는 시트
     file_prefix: str = "지급명단"
+    # 선택 항목(해당 사업만 사용): 근무형태 키 -> 시급(원), 출력 명단에서 숨길 열 문자
+    hourly_rates: tuple[tuple[str, int], ...] = ()
+    hidden_list_columns: tuple[str, ...] = ()
+
+    def rates(self) -> dict[str, int]:
+        return dict(self.hourly_rates)
 
     def title(self, year: int, month: int) -> str:
         return self.list_title.format(year=year, month=month)

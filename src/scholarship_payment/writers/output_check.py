@@ -50,6 +50,7 @@ def verify_output(path: str | Path, validated: ValidatedBatch, source_totals: So
         check(L, a, "wris_code", L.cell(a, 15), vr.wris_code)
         check(L, a, "account_no", L.cell(a, 16), p.account_no, True)
         check(L, a, "hours", L.cell(a, 11), format_minutes(p.minutes))
+        check(L, a, "hourly_rate", L.cell(a, 10), p.rate_display if p.rate_display is not None else p.hourly_rate)
         check(W, b, "student_id", W.cell(b, 4), p.student_id, True)
         check(W, b, "pay_amount", W.cell(b, 7), p.pay_amount)
         check(W, b, "bank_code", W.cell(b, 8), vr.wins_code)
