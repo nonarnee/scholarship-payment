@@ -12,6 +12,8 @@ permissions:
 jobs:
   build:
     runs-on: windows-latest
+    env:
+      PYTHONUTF8: "1"        # 러너 콘솔(cp1252)에서 한글 출력이 깨지지 않도록
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
