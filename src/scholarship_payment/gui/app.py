@@ -10,9 +10,6 @@ from pathlib import Path
 
 from scholarship_payment.app.controller import run_conversion
 
-# PyInstaller 실행 파일에서는 번들 폴더(_MEIPASS), 개발 환경에서는 저장소 루트를 기준으로 한다.
-_BASE = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[3]))
-DEFAULT_TEMPLATE = _BASE / "templates" / "synthetic_payment_template.xlsx"
 MAX_PASSWORD_TRIES = 3
 PROGRAM = "daechung"         # 현재 지원: 대청교만
 
@@ -34,7 +31,7 @@ def main() -> None:
     root.title("장학금 지급명단 변환 (대청교)")
     root.geometry("720x520")
     v_in, v_out = tk.StringVar(), tk.StringVar()
-    v_tpl, v_pol, v_date = tk.StringVar(value=str(DEFAULT_TEMPLATE)), tk.StringVar(), tk.StringVar()
+    v_tpl, v_pol, v_date = tk.StringVar(), tk.StringVar(), tk.StringVar()   # 템플릿은 반드시 직접 선택(합성 템플릿 자동 사용 금지)
     state: dict[str, Path | None] = {"out": None}
 
     frm = ttk.Frame(root, padding=12)

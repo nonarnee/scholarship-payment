@@ -42,6 +42,8 @@ def run_conversion(program: str, input_path, out_dir, template_path, policy_path
         return Outcome(False, "args", "재단 원본 파일을 선택하세요.")
     if not out_dir:
         return Outcome(False, "args", "결과를 저장할 폴더를 선택하세요.")
+    if not template_path:
+        return Outcome(False, "args", "출력 템플릿(은행코드 표가 들어 있는 학교 양식 파일)을 선택하세요.")
     if base_date is not None and not DATE_RE.fullmatch(base_date):
         return Outcome(False, "args", "기준일은 YYYY.MM.DD 형식이어야 합니다.")
     policy = SYNTHETIC_POLICY

@@ -45,3 +45,8 @@ def test_validation_failure_reports_codes_only(make_input, out):
 def test_gui_module_imports_without_tk_loaded():
     import scholarship_payment.gui.app as app          # tkinter 는 main() 안에서만 import 한다
     assert callable(app.main)
+
+
+def test_template_is_required_in_the_shared_layer(make_input, out):
+    o = run_conversion("daechung", make_input(n=2), out, "")
+    assert not o.ok and o.stage == "args" and "템플릿" in o.summary and list(out.iterdir()) == []
