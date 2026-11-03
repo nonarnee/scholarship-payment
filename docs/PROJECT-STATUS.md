@@ -14,6 +14,7 @@
 | 공용 실행 계층(`app/controller.py`) · Tkinter 화면(`gui/app.py`) | 실행 계층은 **구현·테스트됨**. 화면은 코드만 작성, **이 개발 Mac의 Python에 tkinter(`_tkinter`)가 없어 한 번도 실행하지 못함**(문법·import만 확인). Windows에서 실행 확인 필요 |
 | 암호 걸린 재단 원본 열기(`adapters/source.py`, 비밀번호는 메모리 복호화만) | **구현됨**(합성 암호 파일 12개 테스트). 실제 재단 암호 파일·화면 입력창은 **미검증** |
 | 정책 파일 만들기(`config/policy_builder.py`, 화면 버튼·`make-policy` 명령) · 은행코드 누락 은행명 안내 | **구현됨**(합성 테스트 24개). 화면 대화상자는 미실행. 은행코드 표 보완은 **사용자가 템플릿의 `은행코드` 시트를 직접 채우는 방식으로 확정(2026-11-03)** |
+| 기본 정책 파일 자동 채움(`config/default_paths.py`) | **구현됨**: 화면이 exe 폴더 또는 `%APPDATA%\ScholarshipPayment`의 `policy_daechung.json`을 찾아 정책 칸을 미리 채움(내용은 변환 때 검증). 실제 정책 파일은 저장소에 두지 않음 |
 | EXE / GitHub Actions | 설정 작성됨(`.github/workflows/build-windows.yml`, `packaging/`): Windows 러너에서 안전 검사·테스트·합성 종단 스모크·Tk 확인·PyInstaller 빌드. **러너 실행 결과는 PR의 Actions 기록으로 확인**하며, 만든 exe를 실제로 실행해 본 적은 없음 |
 | 공개 안전 체계 | 구현됨 (검사기, pre-commit 훅, `.gitignore`, 합성 데이터 생성기) |
 | 불변조건 자동 테스트 | DI·FP 대부분이 합성 데이터에서 자동 테스트됨(§4). **실제 템플릿·실자료·Windows Excel·업로드 시스템은 미검증** |
