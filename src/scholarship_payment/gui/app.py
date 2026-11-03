@@ -13,6 +13,7 @@ from scholarship_payment.app.controller import run_conversion
 # PyInstaller 실행 파일에서는 번들 폴더(_MEIPASS), 개발 환경에서는 저장소 루트를 기준으로 한다.
 _BASE = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[3]))
 DEFAULT_TEMPLATE = _BASE / "templates" / "synthetic_payment_template.xlsx"
+MAX_PASSWORD_TRIES = 3
 PROGRAM = "daechung"         # 현재 지원: 대청교만
 
 
@@ -27,7 +28,7 @@ def open_folder(path: Path) -> None:
 
 def main() -> None:
     import tkinter as tk
-    from tkinter import filedialog, ttk
+    from tkinter import filedialog, simpledialog, ttk
 
     root = tk.Tk()
     root.title("장학금 지급명단 변환 (대청교)")
@@ -71,8 +72,17 @@ def main() -> None:
 
     def run() -> None:
         btn_open.configure(state="disabled")
-        o = run_conversion(PROGRAM, v_in.get().strip(), v_out.get().strip(), v_tpl.get().strip(),
-                           v_pol.get().strip() or None, v_date.get().strip() or None)
+        args = (PROGRAM, v_in.get().strip(), v_out.get().strip(), v_tpl.get().strip(), v_pol.get().strip() or None,
+                v_date.get().strip() or None)
+        o = run_conversion(*args)
+        for _ in range(MAX_PASSWORD_TRIES):
+            if not o.needs_password:
+                break
+            pw = simpledialog.askstring("비밀번호", o.summary + "\n원본 파일 비밀번호를 입력하세요.", show="*", parent=root)
+            if not pw:                                   # 취소
+                break
+            o = run_conversion(*args, password=pw)
+            pw = None
         show([o.summary, *o.details] + ([f"저장 위치: {o.output_path}"] if o.ok else []))
         state["out"] = o.output_path
         if o.ok:

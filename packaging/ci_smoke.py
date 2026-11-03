@@ -15,4 +15,11 @@ with tempfile.TemporaryDirectory() as d:
     mk.save_input(src, 45, "numeric")
     o = run_conversion("daechung", src, out, ROOT / "templates" / "synthetic_payment_template.xlsx")
     print(o.summary)
-    sys.exit(0 if o.ok and o.count == 45 and o.output_path.exists() else 1)
+    ok = o.ok and o.count == 45 and o.output_path.exists()
+    from msoffcrypto.format.ooxml import OOXMLFile
+    enc = Path(d) / "synthetic_encrypted.xlsx"
+    with open(src, "rb") as f, open(enc, "wb") as g:
+        OOXMLFile(f).encrypt("synthetic-pw", g)
+    o2 = run_conversion("daechung", enc, out, ROOT / "templates" / "synthetic_payment_template.xlsx", password="synthetic-pw")
+    print(o2.summary)
+    sys.exit(0 if ok and o2.ok and o2.count == 45 else 1)
