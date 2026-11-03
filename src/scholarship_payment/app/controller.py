@@ -62,5 +62,7 @@ def run_conversion(program: str, input_path, out_dir, template_path, policy_path
         if codes & {PASSWORD_REQUIRED, PASSWORD_WRONG}:
             msg = "비밀번호가 틀렸습니다." if PASSWORD_WRONG in codes else "암호가 걸린 파일입니다. 비밀번호가 필요합니다."
             return Outcome(False, e.stage, msg, (), needs_password=True)
+        if e.missing_banks:
+            extra += ("은행코드 표(템플릿의 '은행코드' 시트)에 WINS·WRIS 코드를 채워야 하는 은행: " + ", ".join(e.missing_banks),)
         return Outcome(False, e.stage, "변환 실패: 파일을 만들지 않았습니다.", extra + _lines(e.errors))
     return Outcome(True, "ok", f"완료: 대상자 {r.count}명, 출력 재검증 통과", tuple(f"경고: {w}" for w in r.warnings), r.output_path, r.count)

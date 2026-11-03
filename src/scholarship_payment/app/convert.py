@@ -25,9 +25,11 @@ ADAPTERS = {"daechung": DaechungAdapter}
 class ConversionFailed(ValidationFailed):
     """변환이 중단되었다. `stage`는 input / template / validate / write / output 중 하나."""
 
-    def __init__(self, errors, stage: str) -> None:
+    def __init__(self, errors, stage: str, missing_banks: tuple[str, ...] = ()) -> None:
         super().__init__(errors)
         self.stage = stage
+        # 은행코드 표를 고쳐야 할 은행명(화면 안내용). 오류 문구·repr 에는 포함하지 않는다.
+        self.missing_banks = missing_banks
 
 
 @dataclass(frozen=True)
@@ -59,7 +61,9 @@ def convert(program: str, input_path, out_dir, template_path, policy: OutputPoli
     try:
         validated = validate(adapted.batch, banks)
     except ValidationFailed as e:
-        raise ConversionFailed(e.errors, "validate") from None
+        bad_rows = {x.row for x in e.errors if x.code.startswith("BANK_CODE_")}
+        banks_to_fix = tuple(sorted({r.bank_name for r in adapted.batch.rows if r.source_row in bad_rows}))
+        raise ConversionFailed(e.errors, "validate", banks_to_fix) from None
     try:
         wb = build_workbook(validated, template_path, policy, base_date)
     except ValidationFailed as e:
