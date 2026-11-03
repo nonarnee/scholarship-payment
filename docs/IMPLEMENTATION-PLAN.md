@@ -91,6 +91,7 @@
 - 서명 없는 exe의 학교 PC 보안정책 대응은 L4. Windows 10/11 + 실제 Excel UAT 전에는 "완료"라고 표현하지 않는다.
 
 ## 7. 후속 구현 순서 (사용자 지시 후)
+> 진행 상황: 1~6 구현됨(합성 데이터 기준, `PROJECT-STATUS.md`). 6번의 "명령줄"은 `python -m scholarship_payment convert …`. 7~9와 실자료·Windows Excel 검증은 미착수.
 1. 프로젝트 골격(`pyproject.toml`, `src/`, `tests/`), 합성 fixture 생성기.
 2. 모델·정규화(시간 파서→분, 식별자 문자열) + 단위 테스트.
 3. `DaechungAdapter` + 레이아웃 검증 + 진단 보고서.
