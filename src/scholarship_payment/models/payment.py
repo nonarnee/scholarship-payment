@@ -30,6 +30,7 @@ class PaymentRow:
     biz_no: str = field(default="", repr=False)
     headcount: int | None = field(default=None, repr=False)
     hourly_rate: int | None = field(default=None, repr=False)
+    rate_display: str | None = field(default=None, repr=False)     # 시급이 여럿인 묶음의 표시용 문자열(없으면 hourly_rate)
 
     def __post_init__(self) -> None:
         if not _is_int(self.source_row):
@@ -47,6 +48,8 @@ class PaymentRow:
         for name in ("pay_amount", "minutes"):
             if not _is_int(getattr(self, name)):
                 raise ValidationError("FIELD_TYPE", name, row)
+        if self.rate_display is not None and not isinstance(self.rate_display, str):
+            raise ValidationError("FIELD_TYPE", "rate_display", row)
         for name in ("headcount", "hourly_rate"):
             value = getattr(self, name)
             if value is not None and not _is_int(value):

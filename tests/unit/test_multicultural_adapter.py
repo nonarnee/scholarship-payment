@@ -87,7 +87,10 @@ def test_students_in_one_group_must_be_the_same_person(make_mc_input, synthetic)
 
 
 def test_mixed_months_are_blocked(make_mc_input):
-    assert ("MONTH_MIXED", None) in fail(make_mc_input(n=2, mutate=lambda ws: ws.__setitem__("D5", "9999-08")))
+    def mut(ws):
+        ws["D5"] = "9999-09"
+        ws["D3"] = "9999-10"
+    assert ("MONTH_MIXED", None) in fail(make_mc_input(n=2, mutate=mut))
 
 
 @pytest.mark.parametrize("bad", ["9999년09월", "9999-13", "", None])
@@ -122,3 +125,37 @@ def test_errors_never_contain_values(make_mc_input):
         read(make_mc_input(n=2, mutate=lambda ws: ws.__setitem__("N3", 7)))
     text = str(e.value) + repr(e.value)
     assert "가상001" not in text and "90000001" not in text and "000-000-" not in text
+
+
+def test_mixed_rates_are_displayed_top_first_and_same_rates_stay_numeric(make_mc_input, synthetic):
+    r = read(make_mc_input(students=two_orgs(synthetic))).batch.rows
+    assert r[1].rate_display == "1,500 / 1,000" and r[1].hourly_rate == 1500 and r[0].rate_display is None
+    st = synthetic.mc_students(1)
+    st[0]["rows"] = [("가상기관X", "가상A", 3 * 60), ("가상기관Y", "가상A", 4 * 60)]
+    assert read(make_mc_input(students=st)).batch.rows[0].rate_display is None
+
+
+def _set_work(ws, coord, text):
+    ws[coord] = text
+
+
+def test_carryover_activity_month_is_a_warning_not_an_error(make_mc_input):
+    # 4월 활동분이 9월에 지급되는 이월 행: 근무형태 앞 월이 지급월과 다르다
+    res = read(make_mc_input(n=2, mutate=lambda ws: _set_work(ws, "H3", "04월 방문(가상A)")))
+    assert ("CARRYOVER_ROW", 3) in [(w.code, w.row) for w in res.warnings]
+    assert read(make_mc_input(n=2)).warnings == ()
+
+
+def test_activity_month_after_payment_month_is_blocked_except_at_school_year_boundary(make_mc_input):
+    assert ("ACTIVITY_MONTH_INVALID", 3) in fail(make_mc_input(n=1, mutate=lambda ws: _set_work(ws, "H3", "11월 방문(가상A)")))
+    assert ("ACTIVITY_MONTH_INVALID", 3) in fail(make_mc_input(n=1, mutate=lambda ws: _set_work(ws, "H3", "13월 방문(가상A)")))
+
+    def jan(ws):                       # 지급월 1월: 전년도 11월 활동분이 지급될 수 있다
+        ws["D3"] = "9999-01"
+        ws["H3"] = "11월 방문(가상A)"
+    res = read(make_mc_input(n=1, mutate=jan))
+    assert (res.batch.year, res.batch.month) == (9999, 1) and [w.code for w in res.warnings] == ["CARRYOVER_ROW"]
+
+
+def test_work_type_without_a_month_prefix_is_still_accepted_for_the_rate(make_mc_input):
+    assert read(make_mc_input(n=1, mutate=lambda ws: _set_work(ws, "H3", "방문(가상A)"))).batch.rows

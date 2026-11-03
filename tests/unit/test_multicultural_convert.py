@@ -34,7 +34,8 @@ def test_end_to_end_one_row_per_student_and_column_f_hidden(make_mc_input, synth
     assert ws.column_dimensions["F"].hidden is True
     assert [ws[f"F{r}"].value for r in range(5, 9)] == [None] * 4                      # 사업자등록번호 공란
     assert ws["G7"].value == "가상기관최근" and ws["H7"].value == "가상기관최근"
-    assert ws["J7"].value == 1500 and ws["I7"].value == 1
+    assert ws["J7"].value == "1,500 / 1,000" and ws["I7"].value == 1                      # 시급이 다르면 위 행부터 둘 다 표시
+    assert isinstance(ws["J5"].value, int)
     assert ws["L7"].value == 1500 * 5 + 1000 * 6
     wins, wris = load_workbook(res.output_path)["WINS"], load_workbook(res.output_path)["WRIS"]
     assert wins.max_row == 5 and wris.max_row == 5                                        # 학생당 1행

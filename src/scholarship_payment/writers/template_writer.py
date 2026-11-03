@@ -157,7 +157,7 @@ def build_workbook(validated: ValidatedBatch, template_path: str | Path, policy:
         r, p = LIST_FIRST + i, vr.row
         _apply(ws, r, first if i == 0 else mid)
         values = {"A": i + 1, "B": ym, "C": p.name, "D": p.student_id, "E": p.department, "F": p.biz_no, "G": p.org_name,
-                  "H": p.work_place, "I": p.headcount, "J": p.hourly_rate, "K": format_minutes(p.minutes), "L": p.pay_amount,
+                  "H": p.work_place, "I": p.headcount, "J": p.rate_display if p.rate_display is not None else p.hourly_rate, "K": format_minutes(p.minutes), "L": p.pay_amount,
                   "M": p.bank_name, "N": vr.wins_code, "O": vr.wris_code, "P": p.account_no}
         for col, v in values.items():
             _put(ws, f"{col}{r}", v)

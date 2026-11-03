@@ -55,7 +55,7 @@ def test_sheet_list_mismatch(good, tmp_path):
 
 @pytest.mark.parametrize("sheet,cell,field", [
     (LIST, "L7", "list:pay_amount"), (LIST, "D7", "list:student_id"), (LIST, "P7", "list:account_no"),
-    (LIST, "N7", "list:wins_code"), (LIST, "O7", "list:wris_code"), (LIST, "C7", "list:name"),
+    (LIST, "N7", "list:wins_code"), (LIST, "O7", "list:wris_code"), (LIST, "C7", "list:name"), (LIST, "J7", "list:hourly_rate"),
     ("WINS", "G4", "WINS:pay_amount"), ("WINS", "H4", "WINS:bank_code"), ("WINS", "D4", "WINS:student_id"),
     ("WRIS", "E4", "WRIS:pay_amount"), ("WRIS", "F4", "WRIS:bank_code"), ("WRIS", "G4", "WRIS:account_no"), ("WRIS", "D4", "WRIS:name"),
 ])

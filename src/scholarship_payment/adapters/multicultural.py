@@ -7,8 +7,11 @@
 - 시급은 계산하지 않는다. 근무형태 끝의 괄호 값(예: 도시/농어촌)으로 정책의 시급표에서 찾는다. 표에 없으면 차단한다.
   각 행의 총금액은 `시간 × 시급`과 정확히 같아야 하며, 다르면 차단한다. 총금액은 원본 값을 쓴다.
 - 묶음의 소계 행과 맨 아래 합계 행은 데이터 행 합계와 일치해야 한다.
+- 시급이 다른 기관이 섞인 학생은 명단 시급 칸에 `위 행 시급 / 아래 행 시급`(예: `18,000 / 14,000`)으로 문자열 표시한다.
+- 근무형태 앞의 활동월(`04월 …`)이 지급월과 다르면 이월로 보고 경고(`CARRYOVER_ROW`)만 낸다. 활동월이 지급월보다 늦은 경우는
+  지급월이 1·2월(학년도 경계)일 때만 허용하고 그 밖에는 차단한다. 년월 열은 모든 행이 같아야 한다.
 - 사업자등록번호는 원본에 없어 빈 값이다. 멘티 인원은 맨 위 행 기준 1명이다.
-- 년월(`YYYY-MM`)은 모든 데이터 행이 같아야 한다. 이월 행의 년월이 다른 경우도 지금은 차단한다(OPEN M26).
+- 년월(`YYYY-MM`)은 모든 데이터 행이 같아야 한다.
 - 원본은 읽기만 한다.
 """
 from __future__ import annotations
@@ -36,6 +39,7 @@ EXPECTED_HEADERS = {
 REQUIRED_MERGES = (*(f"{c}1:{c}2" for c in "ABCDEFGMNQ"), "H1:L1", "O1:P1")
 _YM = re.compile(r"([0-9]{4})-([0-9]{2})")
 _PAREN = re.compile(r"\(([^()]*)\)\s*$")
+_ACT_MONTH = re.compile(r"\s*([0-9]{1,2})월")
 
 
 def _parse_ym(value: object) -> tuple[int, int]:
@@ -159,10 +163,19 @@ class MulticulturalAdapter:
         if minutes is not None and amount is not None and rate is not None and amount * 60 != minutes * rate:
             errors.append(ValidationError("AMOUNT_RATE_MISMATCH", "pay_amount", r))
             failed = True
+        carry = False
+        mm = _ACT_MONTH.match(work) if isinstance(work, str) else None
+        if mm and ym is not None:
+            act = int(mm.group(1))
+            if not 1 <= act <= 12 or (act > ym[1] and ym[1] not in (1, 2)):
+                # 활동월이 지급월보다 늦을 수 있는 경우는 학년도 경계(지급월 1·2월, 전년도 활동분)뿐이다
+                errors.append(ValidationError("ACTIVITY_MONTH_INVALID", "work_type", r))
+                failed = True
+            carry = act != ym[1]
         if failed:
             return None
         yms.add(ym)
-        return {"row": r, "student_id": student_id, "name": _text(g("E")), "dept": _text(g("G")), "org": _text(g("I")),
+        return {"carry": carry, "row": r, "student_id": student_id, "name": _text(g("E")), "dept": _text(g("G")), "org": _text(g("I")),
                 "bank": _text(g("O")), "account": account, "minutes": minutes, "amount": amount, "rate": rate}
 
     def _close_group(self, ws, r, group, errors, warnings) -> PaymentRow | None:
@@ -176,8 +189,11 @@ class MulticulturalAdapter:
             if any(rec[k] != top[k] for k in ("student_id", "name")):
                 errors.append(ValidationError("GROUP_STUDENT_MISMATCH", "student_id", rec["row"]))
                 return None
-        if len({rec["rate"] for rec in group}) > 1:
+        distinct = list(dict.fromkeys(rec["rate"] for rec in group))          # 위(최근) 행부터, 중복 제거
+        if len(distinct) > 1:
             warnings.append(ValidationError("RATE_MIXED_IN_GROUP", "hourly_rate", r))
+        if any(rec["carry"] for rec in group):
+            warnings.append(ValidationError("CARRYOVER_ROW", "work_type", top["row"]))
         minutes = sum(rec["minutes"] for rec in group)
         amount = sum(rec["amount"] for rec in group)
         try:
@@ -196,6 +212,7 @@ class MulticulturalAdapter:
                 source_row=top["row"], student_id=top["student_id"], name=top["name"], account_no=top["account"],
                 bank_name=top["bank"], pay_amount=amount, minutes=minutes, department=top["dept"],
                 org_name=top["org"], work_place=top["org"], biz_no="", headcount=1, hourly_rate=top["rate"],
+                rate_display=" / ".join(f"{x:,}" for x in distinct) if len(distinct) > 1 else None,
             )
         except ValidationError as e:
             errors.append(e)
