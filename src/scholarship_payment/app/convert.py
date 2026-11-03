@@ -4,6 +4,7 @@ GUI/명령줄은 이 함수만 호출한다. 업무 계산·변환 규칙은 여
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
 
 from openpyxl import load_workbook
@@ -37,7 +38,10 @@ class ConvertResult:
 
 
 def convert(program: str, input_path, out_dir, template_path, policy: OutputPolicy = SYNTHETIC_POLICY,
-            base_date: str | None = None) -> ConvertResult:
+            base_date: str | None = None, today: date | None = None) -> ConvertResult:
+    """base_date 미지정 시 기준일은 작성일(today, 기본 오늘) `YYYY.MM.DD` (사용자 결정)."""
+    if base_date is None:
+        base_date = (today or date.today()).strftime("%Y.%m.%d")
     adapter_cls = ADAPTERS.get(program)
     if adapter_cls is None:
         raise ConversionFailed([ValidationError("PROGRAM_UNSUPPORTED", "program")], "input")
@@ -61,8 +65,6 @@ def convert(program: str, input_path, out_dir, template_path, policy: OutputPoli
         raise ConversionFailed(e.errors, "template") from None
 
     warnings = list(adapted.warnings)
-    if base_date is None:
-        warnings.append(ValidationError("BASE_DATE_UNSET", "base_date"))
     b = validated.batch
     filename = f"{policy.file_prefix}_{b.program_code}_{b.year:04d}_{b.month:02d}.xlsx"
     try:

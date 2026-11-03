@@ -1,0 +1,23 @@
+{
+  "list_title": "합성 데이터 — 가상 사업 지급 명단 ({month}월분)",
+  "wins_work_name": "SYN-근로구분",
+  "wris_gub_a": "SYN-GUB-A",
+  "wris_gub_b": "SYN-GUB-B",
+  "remit_info": "가상사업({month}월)",
+  "wris_headers": [
+    "gub_a",
+    "gub_b",
+    "verify_no",
+    "payee_name",
+    "total_money",
+    "bank_code",
+    "account_no",
+    "depositor",
+    "remit_info",
+    "remark"
+  ],
+  "excluded_sheets": [
+    "업로드 결과(이력)"
+  ],
+  "file_prefix": "지급명단"
+}
