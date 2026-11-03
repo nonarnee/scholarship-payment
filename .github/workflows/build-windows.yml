@@ -1,0 +1,42 @@
+name: build-windows
+# 합성 데이터만 사용한다. 실제 업무 파일은 저장소에도 CI에도 올리지 않는다.
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    env:
+      PYTHONUTF8: "1"        # 러너 콘솔(cp1252)에서 한글 출력이 깨지지 않도록
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: python -m pip install -e ".[dev]" pyinstaller==6.11.1
+      - name: Public safety check
+        run: python tools/safety/check_public_safety.py --tracked
+      - name: Tests
+        run: python -m pytest -q tests
+      - name: Synthetic end-to-end smoke
+        run: python packaging/ci_smoke.py
+      - name: Tk available
+        run: python -c "import tkinter; r = tkinter.Tk(); r.destroy(); print('tk ok')"
+      - name: Build exe
+        run: >
+          pyinstaller --noconfirm --onefile --windowed --name ScholarshipPayment
+          --paths src
+          --add-data "templates/synthetic_payment_template.xlsx;templates"
+          packaging/run_gui.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ScholarshipPayment-windows
+          path: dist/ScholarshipPayment.exe
+          if-no-files-found: error
