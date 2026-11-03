@@ -11,6 +11,7 @@ from openpyxl import load_workbook
 
 from scholarship_payment.adapters.base import InputValidationFailed
 from scholarship_payment.adapters.daechung import DaechungAdapter
+from scholarship_payment.adapters.multicultural import MulticulturalAdapter
 from scholarship_payment.config.policy import SYNTHETIC_POLICY, OutputPolicy
 from scholarship_payment.core.bank_codes import BankCodeTable
 from scholarship_payment.errors import ValidationError, ValidationFailed
@@ -19,7 +20,10 @@ from scholarship_payment.validation.validator import validate
 from scholarship_payment.writers.output_check import verify_output
 from scholarship_payment.writers.template_writer import build_workbook
 
-ADAPTERS = {"daechung": DaechungAdapter}
+ADAPTERS = {
+    "daechung": lambda policy: DaechungAdapter(),
+    "multicultural": lambda policy: MulticulturalAdapter(policy.rates()),
+}
 
 
 class ConversionFailed(ValidationFailed):
@@ -55,7 +59,7 @@ def convert(program: str, input_path, out_dir, template_path, policy: OutputPoli
     except Exception:
         raise ConversionFailed([ValidationError("TEMPLATE_UNREADABLE", "template")], "template") from None
     try:
-        adapted = adapter_cls().read(input_path, password)
+        adapted = adapter_cls(policy).read(input_path, password)
     except InputValidationFailed as e:
         raise ConversionFailed(e.errors, "input") from None
     try:

@@ -10,11 +10,11 @@ from pathlib import Path
 
 from scholarship_payment.app.controller import run_conversion
 from scholarship_payment.config.default_paths import default_policy_path, default_template_path, search_dirs
-from scholarship_payment.config.policy_builder import PROMPTS, make_policy_file
+from scholarship_payment.config.policy_builder import HIDDEN_FOR, PROMPTS, RATES_PROMPT, make_policy_file
 from scholarship_payment.errors import ValidationFailed
 
 MAX_PASSWORD_TRIES = 3
-PROGRAM = "daechung"         # 현재 지원: 대청교만
+PROGRAMS = {"대청교": "daechung", "다문화·탈북학생 멘토링": "multicultural"}     # AI멘토링은 샘플 확보 전
 
 
 def open_folder(path: Path) -> None:
@@ -31,13 +31,23 @@ def main() -> None:
     from tkinter import filedialog, simpledialog, ttk
 
     root = tk.Tk()
-    root.title("장학금 지급명단 변환 (대청교)")
+    root.title("장학금 지급명단 변환")
     root.geometry("720x520")
     v_in, v_out = tk.StringVar(), tk.StringVar()
-    default_pol = default_policy_path(PROGRAM)        # 사용자 PC 에 정책 파일이 있으면 미리 채운다(없으면 빈칸)
-    default_tpl = default_template_path(PROGRAM)
-    v_tpl, v_pol, v_date = (tk.StringVar(value=str(default_tpl) if default_tpl else ""),
-                            tk.StringVar(value=str(default_pol) if default_pol else ""), tk.StringVar())
+    v_prog = tk.StringVar(value=next(iter(PROGRAMS)))
+    v_tpl, v_pol, v_date = tk.StringVar(), tk.StringVar(), tk.StringVar()
+    last_default = {"tpl": "", "pol": ""}
+
+    def program() -> str:
+        return PROGRAMS[v_prog.get()]
+
+    def fill_defaults(*_) -> None:
+        """사용자 PC 에 해당 사업의 템플릿·정책 파일이 있으면 미리 채운다(직접 고른 값은 덮어쓰지 않는다)."""
+        tpl, pol = default_template_path(program()), default_policy_path(program())
+        for var, key, path in ((v_tpl, "tpl", tpl), (v_pol, "pol", pol)):
+            if var.get() in ("", last_default[key]):
+                var.set(str(path) if path else "")
+            last_default[key] = str(path) if path else ""
     state: dict[str, Path | None] = {"out": None}
 
     frm = ttk.Frame(root, padding=12)
@@ -55,16 +65,21 @@ def main() -> None:
     def pick_dir():
         v_out.set(filedialog.askdirectory() or v_out.get())
 
-    row(0, "재단 원본(월별지급승인)", v_in, pick_file(v_in, [("Excel", "*.xlsx")]))
-    row(1, "결과 저장 폴더", v_out, pick_dir)
-    row(2, "출력 템플릿", v_tpl, pick_file(v_tpl, [("Excel", "*.xlsx")]))
-    row(3, "정책 파일(JSON)", v_pol, pick_file(v_pol, [("JSON", "*.json")]))
-    ttk.Label(frm, text="기준일(YYYY.MM.DD, 비우면 오늘)").grid(row=4, column=0, sticky="w", pady=4)
-    ttk.Entry(frm, textvariable=v_date, width=14).grid(row=4, column=1, sticky="w", padx=6)
+    ttk.Label(frm, text="사업").grid(row=0, column=0, sticky="w", pady=4)
+    cb = ttk.Combobox(frm, textvariable=v_prog, values=list(PROGRAMS), state="readonly")
+    cb.grid(row=0, column=1, sticky="w", padx=6)
+    cb.bind("<<ComboboxSelected>>", fill_defaults)
+    row(1, "재단 원본(월별지급 파일)", v_in, pick_file(v_in, [("Excel", "*.xlsx")]))
+    row(2, "결과 저장 폴더", v_out, pick_dir)
+    row(3, "출력 템플릿", v_tpl, pick_file(v_tpl, [("Excel", "*.xlsx")]))
+    row(4, "정책 파일(JSON)", v_pol, pick_file(v_pol, [("JSON", "*.json")]))
+    ttk.Label(frm, text="기준일(YYYY.MM.DD, 비우면 오늘)").grid(row=5, column=0, sticky="w", pady=4)
+    ttk.Entry(frm, textvariable=v_date, width=14).grid(row=5, column=1, sticky="w", padx=6)
+    fill_defaults()
 
     log = tk.Text(frm, height=14, state="disabled", wrap="word")
-    log.grid(row=6, column=0, columnspan=3, sticky="nsew", pady=8)
-    frm.rowconfigure(6, weight=1)
+    log.grid(row=7, column=0, columnspan=3, sticky="nsew", pady=8)
+    frm.rowconfigure(7, weight=1)
     btn_open = ttk.Button(frm, text="결과 폴더 열기", state="disabled", command=lambda: open_folder(state["out"].parent))
 
     def show(lines: list[str]) -> None:
@@ -75,7 +90,7 @@ def main() -> None:
 
     def run() -> None:
         btn_open.configure(state="disabled")
-        args = (PROGRAM, v_in.get().strip(), v_out.get().strip(), v_tpl.get().strip(), v_pol.get().strip() or None,
+        args = (program(), v_in.get().strip(), v_out.get().strip(), v_tpl.get().strip(), v_pol.get().strip() or None,
                 v_date.get().strip() or None)
         o = run_conversion(*args)
         for _ in range(MAX_PASSWORD_TRIES):
@@ -99,12 +114,16 @@ def main() -> None:
         dlg = tk.Toplevel(root)
         dlg.title("정책 파일 만들기")
         dlg.columnconfigure(1, weight=1)
-        vars_ = {k: tk.StringVar() for k in PROMPTS}
-        for i, (k, label) in enumerate(PROMPTS.items()):
+        prog = program()
+        labels = dict(PROMPTS)
+        if prog in HIDDEN_FOR:
+            labels["rates"] = RATES_PROMPT
+        vars_ = {k: tk.StringVar() for k in labels}
+        for i, (k, label) in enumerate(labels.items()):
             ttk.Label(dlg, text=label).grid(row=i, column=0, sticky="w", padx=8, pady=4)
             ttk.Entry(dlg, textvariable=vars_[k], width=48).grid(row=i, column=1, sticky="ew", padx=8)
         msg = ttk.Label(dlg, text="", foreground="#b00020")
-        msg.grid(row=len(PROMPTS) + 1, column=0, columnspan=2, sticky="w", padx=8)
+        msg.grid(row=len(labels) + 1, column=0, columnspan=2, sticky="w", padx=8)
 
         def save() -> None:
             home = search_dirs()[-1]                      # 기본 저장 위치: 다음 실행 때 자동으로 채워지는 곳
@@ -113,11 +132,13 @@ def main() -> None:
             except OSError:
                 home = None
             out = filedialog.asksaveasfilename(parent=dlg, defaultextension=".json", filetypes=[("JSON", "*.json")], title="정책 파일 저장 위치",
-                                               initialfile=f"policy_{PROGRAM}.json", **({"initialdir": str(home)} if home else {}))
+                                               initialfile=f"policy_{prog}.json", **({"initialdir": str(home)} if home else {}))
             if not out:
                 return
             try:
-                path = make_policy_file(tpl, {k: v.get() for k, v in vars_.items()}, out)
+                entered = {k: v.get() for k, v in vars_.items()}
+                rates_text = entered.pop("rates", None)
+                path = make_policy_file(tpl, entered, out, prog, rates_text)
             except ValidationFailed as e:
                 msg.configure(text="만들지 못했습니다: " + "; ".join(str(x) for x in e.errors[:5]))
                 return
@@ -125,9 +146,9 @@ def main() -> None:
             dlg.destroy()
             show([f"정책 파일을 만들었습니다: {path}"])
 
-        ttk.Button(dlg, text="저장", command=save).grid(row=len(PROMPTS), column=1, sticky="e", padx=8, pady=8)
+        ttk.Button(dlg, text="저장", command=save).grid(row=len(labels), column=1, sticky="e", padx=8, pady=8)
 
-    ttk.Button(frm, text="정책 파일 만들기", command=make_policy).grid(row=4, column=2)
-    ttk.Button(frm, text="변환 실행", command=run).grid(row=5, column=0, columnspan=2, sticky="w", pady=8)
-    btn_open.grid(row=5, column=2)
+    ttk.Button(frm, text="정책 파일 만들기", command=make_policy).grid(row=5, column=2)
+    ttk.Button(frm, text="변환 실행", command=run).grid(row=6, column=0, columnspan=2, sticky="w", pady=8)
+    btn_open.grid(row=6, column=2)
     root.mainloop()

@@ -48,3 +48,20 @@ def make_input(tmp_path):
         return path
 
     return _make
+
+
+@pytest.fixture
+def make_mc_input(tmp_path):
+    """다문화 형식 합성 입력. students 를 직접 주거나 n 으로 자동 생성하고 `mutate(ws)`로 변형한다."""
+    counter = {"n": 0}
+
+    def _make(n=3, students=None, mutate=None):
+        wb = mk.build_input_multicultural(students if students is not None else mk.mc_students(n))
+        if mutate is not None:
+            mutate(wb.active)
+        counter["n"] += 1
+        path = tmp_path / f"mc_input_{counter['n']}.xlsx"
+        wb.save(path)
+        return path
+
+    return _make

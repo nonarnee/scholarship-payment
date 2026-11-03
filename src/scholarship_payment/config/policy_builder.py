@@ -39,14 +39,34 @@ def derive_from_template(template: str | Path) -> dict:
     return {"wris_headers": headers, "excluded_sheets": extra}
 
 
-def build_policy_dict(template: str | Path, values: dict[str, str]) -> dict:
+RATES_PROMPT = "시급표 (예: 이름=금액, 이름=금액 — 이름은 원본 근무형태 끝 괄호 안의 글자)"
+HIDDEN_FOR = {"multicultural": ("F",)}                 # 원본에 없는 열(사업자등록번호)을 공란+숨김 처리
+
+
+def parse_rates(text: str) -> dict[str, int]:
+    """`이름=금액, 이름=금액` 문자열을 시급표로 바꾼다. 형식이 틀리면 ValidationFailed(값은 오류에 넣지 않음)."""
+    rates: dict[str, int] = {}
+    for part in (text or "").split(","):
+        name, sep, amount = part.partition("=")
+        name, amount = name.strip(), amount.strip().replace(",", "")
+        if not sep or not name or not amount.isascii() or not amount.isdigit() or int(amount) <= 0 or name in rates:
+            raise ValidationFailed([ValidationError("POLICY_TYPE", "hourly_rates")])
+        rates[name] = int(amount)
+    return rates
+
+
+def build_policy_dict(template: str | Path, values: dict[str, str], program: str = "daechung", rates_text: str | None = None) -> dict:
     missing = [k for k in USER_KEYS if not isinstance(values.get(k), str) or not values[k].strip()]
     if missing:
         raise ValidationFailed([ValidationError("POLICY_KEY_MISSING", k) for k in missing])
     d = derive_from_template(template)
     d.update({k: values[k] for k in USER_KEYS})
     d["file_prefix"] = DEFAULT_PREFIX
-    return {k: d[k] for k in KEYS}
+    out = {k: d[k] for k in KEYS}
+    if program in HIDDEN_FOR:
+        out["hourly_rates"] = parse_rates(rates_text or "")
+        out["hidden_list_columns"] = list(HIDDEN_FOR[program])
+    return out
 
 
 def save_policy_new(out: str | Path, d: dict) -> Path:
@@ -70,5 +90,6 @@ def save_policy_new(out: str | Path, d: dict) -> Path:
     return out
 
 
-def make_policy_file(template: str | Path, values: dict[str, str], out: str | Path) -> Path:
-    return save_policy_new(out, build_policy_dict(template, values))
+def make_policy_file(template: str | Path, values: dict[str, str], out: str | Path, program: str = "daechung",
+                     rates_text: str | None = None) -> Path:
+    return save_policy_new(out, build_policy_dict(template, values, program, rates_text))

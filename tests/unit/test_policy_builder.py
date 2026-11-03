@@ -76,3 +76,21 @@ def test_cli_make_policy(tmp_path, monkeypatch, capsys):
     answers = iter(VALUES[k] for k in USER_KEYS)
     assert cli.main(["make-policy", "--template", str(TEMPLATE), "--out", str(out)]) == 1      # 덮어쓰기 거부
     assert "POLICY_OUTPUT_EXISTS" in capsys.readouterr().err
+
+
+def test_multicultural_policy_has_rates_and_hidden_column(tmp_path):
+    p = make_policy_file(TEMPLATE, VALUES, tmp_path / "p.json", "multicultural", "가상A=1000, 가상B = 1500")
+    pol = load_policy(p)
+    assert pol.rates() == {"가상A": 1000, "가상B": 1500} and pol.hidden_list_columns == ("F",)
+
+
+@pytest.mark.parametrize("bad", [None, "", "가상A", "가상A=", "=1000", "가상A=0", "가상A=-5", "가상A=1.5", "가상A=1000,가상A=2000", "가상A=１０", "가상A=1,000"])
+def test_bad_rates_text_creates_no_file(tmp_path, bad):
+    with pytest.raises(ValidationFailed):
+        make_policy_file(TEMPLATE, VALUES, tmp_path / "p.json", "multicultural", bad)
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_daechung_policy_has_no_optional_keys(tmp_path):
+    d = json.loads(make_policy_file(TEMPLATE, VALUES, tmp_path / "p.json").read_text(encoding="utf-8"))
+    assert "hourly_rates" not in d and "hidden_list_columns" not in d

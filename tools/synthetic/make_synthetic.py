@@ -287,6 +287,58 @@ def build_input(n, id_mode):
     return wb
 
 
+MC_RATES = {"가상A": 1000, "가상B": 1500}      # 합성 시급표(근무형태 괄호 값 -> 원)
+
+
+def mc_students(n):
+    """다문화 형식 합성 학생 n명(각자 기관 1곳). rows 항목: (기관, 근무형태 키, 분)."""
+    banks = [f"가상은행{k:02d}" for k in range(1, 9)]
+    return [dict(sid=f"90{i:06d}", name=f"가상{i:03d}", dept=f"가상학과{i % 7 + 1:02d}", bank=banks[i % 8],
+                 acct=f"000-000-{i:06d}", ym="9999-09",
+                 rows=[(f"가상기관{i % 12 + 1:02d}", "가상A" if i % 3 else "가상B", (10 + i % 40) * 60 + (30 if i % 4 == 0 else 0))])
+            for i in range(1, n + 1)]
+
+
+def build_input_multicultural(students, rates=MC_RATES):
+    """`월별지급부현황` 형식 합성 입력: 학생 묶음(데이터 행 + 소계 행) 반복 + 합계 행."""
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "월별지급부현황"
+    top = {"A1": 0, "B1": "순번", "C1": "멘토유형", "D1": "년월", "E1": "성명", "F1": "학번", "G1": "학과", "H1": "멘티현황",
+           "M1": "총시간", "N1": "총금액(원)", "O1": "은행정보", "Q1": "지급\n확인", "R1": "비고",
+           "H2": "근무형태", "I2": "기관명", "J2": "학교구분", "K2": "학년", "L2": "멘티명", "O2": "은행명", "P2": "계좌번호"}
+    for k, v in top.items():
+        ws[k] = v
+    for c in "ABCDEFGMNQ":
+        ws.merge_cells(f"{c}1:{c}2")
+    ws.merge_cells("H1:L1")
+    ws.merge_cells("O1:P1")
+    r = 3
+    seq = 0
+    tot_m = tot_a = 0
+    for st in students:
+        sm = sa = 0
+        for org, wk, minutes in st["rows"]:
+            seq += 1
+            amount = rates[wk] * minutes // 60
+            vals = {"A": 0, "B": seq, "C": "가상멘토링", "D": st["ym"], "E": st["name"], "F": st["sid"], "G": st["dept"],
+                    "H": f"09월 방문({wk})", "I": org, "J": "초등학교", "K": "3", "L": "가상멘티", "M": fmt_min(minutes),
+                    "N": amount, "O": st["bank"], "P": st["acct"], "Q": "미처리"}
+            for col, v in vals.items():
+                ws[f"{col}{r}"] = v
+            sm, sa = sm + minutes, sa + amount
+            r += 1
+        for col, v in {"G": "소   계", "M": fmt_min(sm), "N": sa}.items():
+            ws[f"{col}{r}"] = v
+        tot_m, tot_a = tot_m + sm, tot_a + sa
+        r += 1
+    ws[f"A{r}"], ws[f"M{r}"], ws[f"N{r}"] = "합계", fmt_min(tot_m), tot_a
+    ws.merge_cells(f"A{r}:L{r}")
+    ws.column_dimensions["J"].hidden = True
+    mark(wb, "합성 월별지급부현황 입력")
+    return wb
+
+
 def _inject_empty_strings(path, coords):
     """저장된 xlsx 의 지정 칸을 '빈 문자열(inlineStr)' 셀로 바꾼다.
     실제 다운로드 원본은 B·V·X 열과 합계행 일부가 None 이 아니라 빈 문자열이며, openpyxl 은 빈 문자열을 저장하지 않는다."""

@@ -12,6 +12,7 @@ from pathlib import Path
 
 from openpyxl import load_workbook
 from openpyxl.formatting.formatting import ConditionalFormattingList
+from openpyxl.utils import column_index_from_string, get_column_letter
 
 from scholarship_payment.config.policy import OutputPolicy
 from scholarship_payment.core.bank_codes import SHEET_NAME as BANK_SHEET
@@ -71,6 +72,28 @@ def _reset_conditional_format(ws, rule, rng: str) -> None:
     ws.conditional_formatting = ConditionalFormattingList()
     if rule is not None:
         ws.conditional_formatting.add(rng, copy.copy(rule))
+
+
+def _hide_column(ws, letter: str) -> None:
+    """열 하나를 숨긴다. 템플릿이 열 너비를 여러 열 묶음으로 갖고 있으면 그 열만 분리해서 숨긴다."""
+    idx = column_index_from_string(letter)
+    for key, dim in list(ws.column_dimensions.items()):
+        lo, hi = dim.min or column_index_from_string(key), dim.max or column_index_from_string(key)
+        if lo <= idx <= hi:
+            if lo != hi:
+                ws.column_dimensions.pop(key)
+                for part in range(lo, hi + 1):
+                    if part != idx:
+                        clone = copy.copy(dim)
+                        clone.index = get_column_letter(part)
+                        clone.min = clone.max = part
+                        ws.column_dimensions[clone.index] = clone
+                dim.index = letter
+                dim.min = dim.max = idx
+                ws.column_dimensions[letter] = dim
+            dim.hidden = True
+            return
+    ws.column_dimensions[letter].hidden = True
 
 
 def _layout_errors(wb, policy: OutputPolicy) -> list[ValidationError]:
@@ -143,6 +166,8 @@ def build_workbook(validated: ValidatedBatch, template_path: str | Path, policy:
     _put(ws, f"K{t}", format_minutes(batch.total_minutes()))
     _put(ws, f"L{t}", batch.total_amount())
     _reset_conditional_format(ws, rule, f"D{LIST_FIRST}:D{t - 1}")
+    for letter in policy.hidden_list_columns:
+        _hide_column(ws, letter)
     ws["A1"] = policy.title(year, month)
     if base_date is not None:
         _put(ws, "Q2", f"*기준 : {base_date}")
