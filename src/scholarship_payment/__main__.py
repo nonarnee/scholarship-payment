@@ -8,10 +8,8 @@ import re
 import sys
 from pathlib import Path
 
-from scholarship_payment.app.convert import ADAPTERS, ConversionFailed, convert
-from scholarship_payment.config.policy import SYNTHETIC_POLICY
-from scholarship_payment.config.policy_file import load_policy
-from scholarship_payment.errors import ValidationFailed
+from scholarship_payment.app.controller import run_conversion
+from scholarship_payment.app.convert import ADAPTERS
 
 DEFAULT_TEMPLATE = Path(__file__).resolve().parents[2] / "templates" / "synthetic_payment_template.xlsx"
 _DATE = re.compile(r"[0-9]{4}\.[0-9]{2}\.[0-9]{2}")
@@ -35,30 +33,17 @@ def main(argv: list[str] | None = None) -> int:
     if args.base_date is not None and not _DATE.fullmatch(args.base_date):
         print("오류: --base-date 는 YYYY.MM.DD 형식이어야 합니다.", file=sys.stderr)
         return 2
-    policy = SYNTHETIC_POLICY
-    if args.policy is not None:
-        try:
-            policy = load_policy(args.policy)
-        except ValidationFailed as e:
-            print("변환 실패(policy): 정책 파일을 사용할 수 없어 파일을 만들지 않았습니다.", file=sys.stderr)
-            for err in e.errors:
-                print(f"  - {err}", file=sys.stderr)
-            return 1
-    try:
-        result = convert(args.program, args.input, args.out_dir, args.template, policy=policy, base_date=args.base_date)
-    except ConversionFailed as e:
-        print(f"변환 실패({e.stage}): 파일을 만들지 않았습니다.", file=sys.stderr)
-        if e.stage == "template" and args.policy is None:
-            print("  (합성 정책으로 실행 중입니다. 실제 템플릿이면 --policy 정책 파일이 필요할 수 있습니다.)", file=sys.stderr)
-        for err in e.errors[:50]:
-            print(f"  - {err}", file=sys.stderr)
-        if len(e.errors) > 50:
-            print(f"  ... 외 {len(e.errors) - 50}건", file=sys.stderr)
+    o = run_conversion(args.program, args.input, args.out_dir, args.template, args.policy, args.base_date)
+    if not o.ok:
+        stage = "policy" if o.stage == "policy" else o.stage
+        print(f"변환 실패({stage}): {o.summary.split(': ', 1)[-1]}", file=sys.stderr)
+        for line in o.details:
+            print(f"  {line}", file=sys.stderr)
         return 1
-    print(f"완료: {result.output_path}")
-    print(f"대상자 {result.count}명, 출력 재검증 통과")
-    for w in result.warnings:
-        print(f"  경고: {w}")
+    print(f"완료: {o.output_path}")
+    print(f"대상자 {o.count}명, 출력 재검증 통과")
+    for line in o.details:
+        print(f"  {line}")
     return 0
 
 
