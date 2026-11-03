@@ -159,3 +159,20 @@ def test_activity_month_after_payment_month_is_blocked_except_at_school_year_bou
 
 def test_work_type_without_a_month_prefix_is_still_accepted_for_the_rate(make_mc_input):
     assert read(make_mc_input(n=1, mutate=lambda ws: _set_work(ws, "H3", "방문(가상A)"))).batch.rows
+
+
+def test_year_month_appears_only_on_the_first_row_of_a_student(make_mc_input, synthetic):
+    path = make_mc_input(students=two_orgs(synthetic))
+    from openpyxl import load_workbook
+    ws = load_workbook(path).active
+    assert ws["D5"].value == "9999-09" and ws["D6"].value is None              # 합성 입력도 실제 원본처럼 둘째 행은 비어 있다
+    r = read(path).batch
+    assert (r.year, r.month) == (9999, 9) and len(r.rows) == 3
+
+
+def test_blank_year_month_on_the_first_row_is_still_an_error(make_mc_input, synthetic):
+    assert ("YEARMONTH_FORMAT", 5) in fail(make_mc_input(students=two_orgs(synthetic), mutate=lambda ws: ws.__setitem__("D5", None)))
+
+
+def test_different_year_month_on_a_following_row_is_still_blocked(make_mc_input, synthetic):
+    assert ("MONTH_MIXED", None) in fail(make_mc_input(students=two_orgs(synthetic), mutate=lambda ws: (ws.__setitem__("D6", "9999-08"), ws.__setitem__("H6", "08월 방문(가상A)"))))

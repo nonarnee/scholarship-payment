@@ -318,10 +318,10 @@ def build_input_multicultural(students, rates=MC_RATES):
     tot_m = tot_a = 0
     for st in students:
         sm = sa = 0
-        for org, wk, minutes in st["rows"]:
+        for k, (org, wk, minutes) in enumerate(st["rows"]):
             seq += 1
             amount = rates[wk] * minutes // 60
-            vals = {"A": 0, "B": seq, "C": "가상멘토링", "D": st["ym"], "E": st["name"], "F": st["sid"], "G": st["dept"],
+            vals = {"A": 0, "B": seq, "C": "가상멘토링", "D": st["ym"] if k == 0 else None, "E": st["name"], "F": st["sid"], "G": st["dept"],
                     "H": f"09월 방문({wk})", "I": org, "J": "초등학교", "K": "3", "L": "가상멘티", "M": fmt_min(minutes),
                     "N": amount, "O": st["bank"], "P": st["acct"], "Q": "미처리"}
             for col, v in vals.items():
