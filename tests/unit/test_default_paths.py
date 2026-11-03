@@ -25,3 +25,12 @@ def test_appdata_dir_is_used_on_windows(monkeypatch, tmp_path):
 def test_content_is_never_read(tmp_path):
     (tmp_path / "policy_daechung.json").write_bytes(b"\xff\xfe not json")
     assert default_policy_path("daechung", [tmp_path]) is not None
+
+
+def test_default_template_path(tmp_path):
+    from scholarship_payment.config.default_paths import default_template_path
+    assert default_template_path("daechung", [tmp_path]) is None
+    (tmp_path / "policy_daechung.json").write_text("{}", encoding="utf-8")
+    assert default_template_path("daechung", [tmp_path]) is None          # 정책 파일과 혼동하지 않는다
+    (tmp_path / "template_daechung.xlsx").write_bytes(b"x")
+    assert default_template_path("daechung", [tmp_path]).name == "template_daechung.xlsx"

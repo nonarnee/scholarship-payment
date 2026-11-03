@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 
 from scholarship_payment.app.controller import run_conversion
-from scholarship_payment.config.default_paths import default_policy_path, search_dirs
+from scholarship_payment.config.default_paths import default_policy_path, default_template_path, search_dirs
 from scholarship_payment.config.policy_builder import PROMPTS, make_policy_file
 from scholarship_payment.errors import ValidationFailed
 
@@ -35,7 +35,9 @@ def main() -> None:
     root.geometry("720x520")
     v_in, v_out = tk.StringVar(), tk.StringVar()
     default_pol = default_policy_path(PROGRAM)        # 사용자 PC 에 정책 파일이 있으면 미리 채운다(없으면 빈칸)
-    v_tpl, v_pol, v_date = tk.StringVar(), tk.StringVar(value=str(default_pol) if default_pol else ""), tk.StringVar()   # 템플릿은 반드시 직접 선택(합성 템플릿 자동 사용 금지)
+    default_tpl = default_template_path(PROGRAM)
+    v_tpl, v_pol, v_date = (tk.StringVar(value=str(default_tpl) if default_tpl else ""),
+                            tk.StringVar(value=str(default_pol) if default_pol else ""), tk.StringVar())
     state: dict[str, Path | None] = {"out": None}
 
     frm = ttk.Frame(root, padding=12)
