@@ -10,7 +10,9 @@ from pathlib import Path
 
 from scholarship_payment.app.controller import run_conversion
 
-DEFAULT_TEMPLATE = Path(__file__).resolve().parents[3] / "templates" / "synthetic_payment_template.xlsx"
+# PyInstaller 실행 파일에서는 번들 폴더(_MEIPASS), 개발 환경에서는 저장소 루트를 기준으로 한다.
+_BASE = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[3]))
+DEFAULT_TEMPLATE = _BASE / "templates" / "synthetic_payment_template.xlsx"
 PROGRAM = "daechung"         # 현재 지원: 대청교만
 
 
