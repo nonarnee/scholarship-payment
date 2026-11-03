@@ -1,4 +1,5 @@
 """변환 종단 시험(합성 입력만): 성공 시 파일 생성, 실패 시 어떤 파일도 남기지 않고 원본·템플릿은 불변."""
+from datetime import date
 import hashlib
 from pathlib import Path
 
@@ -50,12 +51,16 @@ def test_success_creates_one_verified_file(make_input, out, n):
     assert wb.sheetnames == ["지급대상자명단(9월)", "WINS", "WRIS", "은행코드"]
     assert wb["WINS"].max_row == n + 1
     assert sha(inp) == before_in and sha(TEMPLATE) == before_tpl
-    assert [w.code for w in res.warnings] == ["BASE_DATE_UNSET"]
+    assert res.warnings == ()
 
 
-def test_base_date_removes_the_warning(make_input, out):
-    res = run(make_input(n=2), out, base_date="2099.10.07")
+def test_base_date_defaults_to_today_and_can_be_overridden(make_input, out):
+    res = run(make_input(n=2), out, today=date(2099, 10, 7))
     assert res.warnings == () and load_workbook(res.output_path)["지급대상자명단(9월)"]["Q2"].value == "*기준 : 2099.10.07"
+    res = run(make_input(n=2), out, base_date="2099.11.01", today=date(2099, 10, 7))
+    assert load_workbook(res.output_path)["지급대상자명단(9월)"]["Q2"].value == "*기준 : 2099.11.01"
+    res = run(make_input(n=2), out)
+    assert load_workbook(res.output_path)["지급대상자명단(9월)"]["Q2"].value == f"*기준 : {date.today():%Y.%m.%d}"
 
 
 def test_running_twice_never_overwrites(make_input, out):
@@ -141,7 +146,7 @@ def test_failure_messages_never_contain_input_values(make_input, out):
 def test_cli_success(make_input, out, capsys):
     code = cli.main(["convert", "--program", "daechung", "--input", str(make_input(n=4)), "--out-dir", str(out), "--template", str(TEMPLATE)])
     text = capsys.readouterr().out
-    assert code == 0 and "대상자 4명" in text and "BASE_DATE_UNSET" in text and any(out.iterdir())
+    assert code == 0 and "대상자 4명" in text and "BASE_DATE_UNSET" not in text and any(out.iterdir())
     assert "가상001" not in text
 
 
