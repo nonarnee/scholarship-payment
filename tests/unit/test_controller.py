@@ -50,3 +50,20 @@ def test_gui_module_imports_without_tk_loaded():
 def test_template_is_required_in_the_shared_layer(make_input, out):
     o = run_conversion("daechung", make_input(n=2), out, "")
     assert not o.ok and o.stage == "args" and "템플릿" in o.summary and list(out.iterdir()) == []
+
+
+def test_missing_bank_names_are_listed_for_the_user_but_not_in_exception_text(make_input, out, tmp_path):
+    from openpyxl import load_workbook
+    from scholarship_payment.app.convert import ConversionFailed, convert
+    wb = load_workbook(TEMPLATE)
+    ws = wb["은행코드"]
+    gone = ws["B2"].value
+    ws["C2"] = None                      # 한 은행의 WINS 코드를 비운다
+    t = tmp_path / "t.xlsx"
+    wb.save(t)
+    inp = make_input(n=3, mutate=lambda s: [s.__setitem__(f"T{r}", gone) for r in (3, 4, 5)])
+    o = run_conversion("daechung", inp, out, t)
+    assert not o.ok and o.stage == "validate" and any(gone in d and "은행코드" in d for d in o.details) and list(out.iterdir()) == []
+    with pytest.raises(ConversionFailed) as e:
+        convert("daechung", inp, out, t)
+    assert e.value.missing_banks == (gone,) and gone not in str(e.value) + repr(e.value) + " ".join(str(x) for x in e.value.errors)

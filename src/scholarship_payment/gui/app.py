@@ -9,6 +9,8 @@ import sys
 from pathlib import Path
 
 from scholarship_payment.app.controller import run_conversion
+from scholarship_payment.config.policy_builder import PROMPTS, make_policy_file
+from scholarship_payment.errors import ValidationFailed
 
 MAX_PASSWORD_TRIES = 3
 PROGRAM = "daechung"         # 현재 지원: 대청교만
@@ -85,6 +87,37 @@ def main() -> None:
         if o.ok:
             btn_open.configure(state="normal")
 
+    def make_policy() -> None:
+        tpl = v_tpl.get().strip()
+        if not tpl:
+            show(["먼저 출력 템플릿을 선택하세요(정책 파일은 템플릿에서 머리글을 읽어 만듭니다)."])
+            return
+        dlg = tk.Toplevel(root)
+        dlg.title("정책 파일 만들기")
+        dlg.columnconfigure(1, weight=1)
+        vars_ = {k: tk.StringVar() for k in PROMPTS}
+        for i, (k, label) in enumerate(PROMPTS.items()):
+            ttk.Label(dlg, text=label).grid(row=i, column=0, sticky="w", padx=8, pady=4)
+            ttk.Entry(dlg, textvariable=vars_[k], width=48).grid(row=i, column=1, sticky="ew", padx=8)
+        msg = ttk.Label(dlg, text="", foreground="#b00020")
+        msg.grid(row=len(PROMPTS) + 1, column=0, columnspan=2, sticky="w", padx=8)
+
+        def save() -> None:
+            out = filedialog.asksaveasfilename(parent=dlg, defaultextension=".json", filetypes=[("JSON", "*.json")], title="정책 파일 저장 위치")
+            if not out:
+                return
+            try:
+                path = make_policy_file(tpl, {k: v.get() for k, v in vars_.items()}, out)
+            except ValidationFailed as e:
+                msg.configure(text="만들지 못했습니다: " + "; ".join(str(x) for x in e.errors[:5]))
+                return
+            v_pol.set(str(path))
+            dlg.destroy()
+            show([f"정책 파일을 만들었습니다: {path}"])
+
+        ttk.Button(dlg, text="저장", command=save).grid(row=len(PROMPTS), column=1, sticky="e", padx=8, pady=8)
+
+    ttk.Button(frm, text="정책 파일 만들기", command=make_policy).grid(row=4, column=2)
     ttk.Button(frm, text="변환 실행", command=run).grid(row=5, column=0, columnspan=2, sticky="w", pady=8)
     btn_open.grid(row=5, column=2)
     root.mainloop()
