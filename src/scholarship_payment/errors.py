@@ -21,3 +21,23 @@ class ValidationError(Exception):
 
     def __repr__(self) -> str:
         return f"ValidationError(code={self.code!r}, field={self.field!r}, row={self.row!r})"
+
+
+_MAX_LISTED = 50
+
+
+class ValidationFailed(Exception):
+    """검증 규칙 위반을 모아서 한 번에 보고한다. 규칙 코드·필드·행 번호만 담는다."""
+
+    def __init__(self, errors) -> None:
+        self.errors: tuple[ValidationError, ...] = tuple(errors)
+        super().__init__(len(self.errors))
+
+    def __str__(self) -> str:
+        shown = "; ".join(str(e) for e in self.errors[:_MAX_LISTED])
+        more = len(self.errors) - _MAX_LISTED
+        tail = f" ... 외 {more}건" if more > 0 else ""
+        return f"검증 실패 {len(self.errors)}건: {shown}{tail}"
+
+    def __repr__(self) -> str:
+        return f"{type(self).__name__}(errors={len(self.errors)})"
