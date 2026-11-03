@@ -11,7 +11,8 @@
 | DaechungAdapter(합성 입력, 재단 다운로드 원본 형태) | **구현됨**(테스트 38개) |
 | 정책 JSON 주입(`--policy`) · 로컬 정책 초안 도구 | **구현됨**(합성 데이터 기준, 신규 테스트 73개) |
 | 은행코드 표 · Validator · 방식 B TemplateWriter · 출력 재검증 · 안전 저장 · 변환 오케스트레이션 · 명령줄 | **구현됨**(합성 템플릿 기준, 신규 테스트 148개) |
-| GUI / EXE / GitHub Actions | 미착수(승인 전) |
+| 공용 실행 계층(`app/controller.py`) · Tkinter 화면(`gui/app.py`) | 실행 계층은 **구현·테스트됨**. 화면은 코드만 작성, **이 개발 Mac의 Python에 tkinter(`_tkinter`)가 없어 한 번도 실행하지 못함**(문법·import만 확인). Windows에서 실행 확인 필요 |
+| EXE / GitHub Actions | 미착수(다음 단계) |
 | 공개 안전 체계 | 구현됨 (검사기, pre-commit 훅, `.gitignore`, 합성 데이터 생성기) |
 | 불변조건 자동 테스트 | DI·FP 대부분이 합성 데이터에서 자동 테스트됨(§4). **실제 템플릿·실자료·Windows Excel·업로드 시스템은 미검증** |
 | Windows Excel 실검증 | **미수행** |
