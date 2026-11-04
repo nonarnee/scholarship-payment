@@ -22,10 +22,11 @@ CHECKED_TEXT = "· 원본 파일 열기와 구조(시트·머리글·합계 행)
 UNCHECKED_TEXT = "· 출력 템플릿의 구조(시트·머리글)\n· 엑셀 파일 생성과 저장\n· 저장 폴더에 실제로 쓸 수 있는지"
 MESSAGES = {
     pv.CANCELLED: "비밀번호 입력을 취소했습니다. 다시 확인하려면 '다시 확인'을 누르세요.",
+    pv.CONSUMED: "이 확인 결과로는 이미 지급명단을 만들었습니다. 다시 만들려면 새 변환을 시작하세요.",
     pv.LOCKED: "비밀번호를 3번 틀려 입력을 막았습니다. 이전 단계로 돌아갔다가 다시 시도하세요.",
 }
 HINTS = {
-    pv.IDLE: "", pv.PREPARING: "원본을 확인하는 중입니다", pv.NEED_PASSWORD: "필요: 비밀번호", pv.READY: "지급명단 생성은 다음 단계에서 제공됩니다",
+    pv.IDLE: "", pv.PREPARING: "원본을 확인하는 중입니다", pv.NEED_PASSWORD: "필요: 비밀번호", pv.READY: "지급명단 생성을 누르면 저장을 시작합니다", pv.CONSUMED: "이미 사용한 확인 결과입니다",
     pv.FAILED: "차단 오류를 해결한 뒤 다시 확인하세요", pv.INVALIDATED: "파일이 바뀌어 미리보기를 무효화했습니다",
     pv.CANCELLED: "비밀번호 입력을 취소했습니다", pv.LOCKED: "비밀번호 입력이 막혔습니다. 이전 단계로 돌아가세요",
 }
@@ -189,8 +190,12 @@ class Step2Page(QWidget):
         self._render()
 
     # --- 동작 ---
-    def enter(self, selection) -> None:
+    def enter(self, selection, resume: bool = False) -> None:
+        """Step 2 로 들어온다. resume=True(Step 3 에서 돌아옴)이면 이미 있는 확인 결과를 그대로 보여 주고 다시 읽지 않는다(변경 감지만 한다)."""
         self._selection = selection
+        if resume and self.session.state != pv.IDLE:
+            self.refresh_freshness()
+            return
         if selection is not None:
             self.session.start(selection)
 
@@ -261,6 +266,10 @@ class Step2Page(QWidget):
                     t = issue_text.describe(code)
                     blocks.append(f"{t.title}\n{label}: {names}\n{t.action}")
             message = "\n".join(blocks) or issue_text.describe("INPUT_FILE_CHANGED").title
+            if s.invalid_reason == pv.REASON_GENERATION_FAILED:
+                message = "지급명단을 만들지 못해 이전 확인 결과를 폐기했습니다. 파일을 확인한 뒤 '다시 확인'을 누르세요."
+            elif s.invalid_after_generation:
+                message = "지급명단은 만들지 않았습니다.\n" + message
         self.message_label.setText(message)
         self.message_label.setVisible(bool(message))
         self.message_box.setVisible(bool(message) or retry_visible)         # 안내가 없어도 '다시 확인' 버튼은 보인다(오류 해결 후 사용자가 직접 다시 확인)

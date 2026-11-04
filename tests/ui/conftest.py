@@ -51,6 +51,23 @@ class FakeChooser:
         return self._next("save")
 
 
+class FakeActions:
+    """폴더 열기·경로 복사를 실제로 하지 않고 기록만 한다."""
+
+    def __init__(self):
+        self.opened, self.copied = [], []
+        self.open_ok = True
+        self.copy_ok = True
+
+    def open_folder(self, path):
+        self.opened.append(str(path))
+        return self.open_ok
+
+    def copy_text(self, text):
+        self.copied.append(str(text))
+        return self.copy_ok
+
+
 @pytest.fixture
 def chooser():
     return FakeChooser()
@@ -59,8 +76,8 @@ def chooser():
 @pytest.fixture
 def make_context(tmp_path, chooser):
     """(settings 저장 위치·기본 탐색 폴더가 tmp_path 안인) 앱 컨텍스트 공장. runner 를 바꿀 수 있다."""
-    def build(runner=None, settings=None):
-        from datetime import date
+    def build(runner=None, settings=None, generation_runner=None, actions=None):
+        from datetime import date, datetime
 
         from scholarship_payment.ui.context import AppContext
         from scholarship_payment.ui.runner import InlineRunner
@@ -69,7 +86,8 @@ def make_context(tmp_path, chooser):
         store = SettingsStore(tmp_path / "cfg" / "settings.json")
         if settings is not None:
             store.commit(settings)
-        return AppContext(store=store, runner=runner or InlineRunner(), chooser=chooser, today=lambda: date(2099, 10, 7), default_dirs=[])
+        return AppContext(store=store, runner=runner or InlineRunner(), chooser=chooser, today=lambda: date(2099, 10, 7), default_dirs=[],
+                          generation_runner=generation_runner, actions=actions or FakeActions(), now=lambda: datetime(2099, 10, 7, 12, 34, 56))
     return build
 
 

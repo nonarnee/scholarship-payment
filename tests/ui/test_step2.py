@@ -78,12 +78,13 @@ def test_no_student_values_or_paths_appear_anywhere_on_screen(win, make_input, t
         assert secret and secret not in t
 
 
-def test_generate_button_is_visible_but_disabled_in_phase3(win, make_input):
+def test_generate_button_is_enabled_only_while_the_preview_is_ready(win, make_input):
     go_step2(win, make_input(n=3))
     assert win.step2.session.state == pv.READY
-    assert win.next_button.isVisible() and not win.next_button.isEnabled() and win.next_button.text() == "지급명단 생성"
-    assert "제공되지 않" in win.next_button.toolTip() and not win.navigator.can_next()
-    assert win.footer_hint.text()
+    assert win.next_button.isVisible() and win.next_button.isEnabled() and win.next_button.text() == "지급명단 생성" and win.navigator.can_next()
+    assert "저장을 시작" in win.footer_hint.text()
+    win.step2.session.invalidate("generation_failed")                      # 확인 결과를 더 쓸 수 없게 되면 눌러도 만들 수 없다
+    assert not win.next_button.isEnabled()
 
 
 def test_displayed_count_and_total_equal_the_file_finish_would_create(win, make_input, out_dir):

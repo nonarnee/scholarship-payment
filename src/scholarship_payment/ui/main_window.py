@@ -9,9 +9,13 @@ from PySide6.QtWidgets import (QFrame, QHBoxLayout, QLabel, QMainWindow, QScroll
 from scholarship_payment import __version__
 from scholarship_payment.ui.context import AppContext
 from scholarship_payment.ui.navigation import STEP_TITLES, Navigator, Step
+from scholarship_payment.ui import generation as gn
+from scholarship_payment.ui import preview as pv
+from scholarship_payment.ui.generation import GenerationSession
 from scholarship_payment.ui.preview import PreviewSession
 from scholarship_payment.ui.state import Step1Model
 from scholarship_payment.ui.step2 import Step2Page
+from scholarship_payment.ui.step3 import Step3Page
 from scholarship_payment.ui.step1 import BLOCKING_LABELS, Step1Page
 from scholarship_payment.ui.theme import FOOTER_HEIGHT, SPACING, STEPPER_HEIGHT, fit_window_size
 from scholarship_payment.ui.widgets import AppButton, Card, StepperBar
@@ -69,9 +73,12 @@ class MainWindow(QMainWindow):
         self.model = Step1Model(self.context.store, self.context.runner, today=self.context.today, default_dirs=self.context.default_dirs)
         self.step1 = Step1Page(self.model, self.context)
         self.step2 = Step2Page(PreviewSession(self.context.runner), self.context)
+        self.generation = GenerationSession(self.context.gen_runner, now=self.context.now)         # 생성 전용 워커
+        self.step3 = Step3Page(self.generation, self.step2.session, self.model, self.context, open_settings=lambda: self.step1.open_settings(),
+                               go_file=self.restart_from_file_selection, new_conversion=self.start_new_conversion)
         self.stack = QStackedWidget()
         for s in Step:
-            self.stack.addWidget({Step.FILE: self.step1, Step.REVIEW: self.step2}.get(s) or _placeholder(s))
+            self.stack.addWidget({Step.FILE: self.step1, Step.REVIEW: self.step2, Step.RESULT: self.step3}[s])
         self._shown = Step.FILE
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
@@ -108,10 +115,15 @@ class MainWindow(QMainWindow):
         self.navigator.on_change(self._sync)
         self.model.on_change(self._sync_ready)
         self.step2.session.on_change(self._sync_hint)
+        self.step2.session.on_change(self._sync_review_ready)
+        self.generation.on_change(self._on_generation_change)
         self._sync_ready()
+        self._sync_review_ready()
         self._sync()
 
     def _on_next(self) -> None:
+        if self.navigator.current == Step.RESULT:
+            return                                       # 이미 생성 단계다(중복 클릭으로 다시 시작하지 않는다)
         if self.navigator.current == Step.FILE:
             self.model.recheck()                         # 선택 후 파일이 사라졌거나 바뀌었는지 다시 확인하고, 아니면 이동하지 않는다
             if not self.model.ready():
@@ -121,6 +133,41 @@ class MainWindow(QMainWindow):
     def _sync_ready(self) -> None:
         self.navigator.set_ready(Step.FILE, self.model.ready())
         self._sync_hint()
+
+    def _sync_review_ready(self) -> None:
+        self.navigator.set_ready(Step.REVIEW, self.step2.session.state == pv.READY)      # 미리보기가 READY 일 때만 '지급명단 생성'을 누를 수 있다
+
+    def _on_generation_change(self) -> None:
+        """생성 상태가 바뀔 때의 창 차원 반응: 이동 잠금, 사용한 확인 결과 폐기, 무효화."""
+        g = self.generation
+        self.navigator.set_locked(g.busy or g.done)                    # 생성 중과 성공 후에는 이동을 막는다(새 변환만 가능)
+        if g.done:
+            self.step2.session.consume()                               # 같은 확인 결과로 다시 만들 수 없게 한다
+            self.navigator.set_ready(Step.RESULT, True)
+        elif g.state == gn.INVALIDATED and g.outcome is not None:
+            self.step2.session.invalidate(pv.REASON_FILES_CHANGED, g.outcome.changed_codes)
+            self.navigator.back()                                      # 지급내역 확인으로 돌려보내 사용자가 다시 확인하게 한다(자동 재생성 없음)
+        elif g.state == gn.FAILED and g.failure_kind != gn.KIND_FOLDER:
+            self.step2.session.invalidate(pv.REASON_GENERATION_FAILED)  # 폴더 오류가 아니면 같은 확인 결과를 다시 쓰지 않는다
+        self._sync()
+
+    def restart_from_file_selection(self) -> None:
+        """실패 화면에서: 선택한 파일은 유지한 채 처음 단계로 돌아가 다시 확인한다."""
+        if self.generation.busy:
+            return
+        self.generation.reset()
+        self.navigator.go(Step.FILE)
+
+    def start_new_conversion(self) -> None:
+        """새 변환: 결과·확인 결과·선택한 원본을 모두 버리고 처음으로 돌아간다(생성 중에는 거부)."""
+        if self.generation.busy:
+            return
+        self.generation.reset()
+        self.step2.leave()
+        self.navigator.reset()
+        self.model.set_source(None)
+        self._sync_ready()
+        self._sync_review_ready()
 
     def _sync_hint(self) -> None:
         """다음 버튼이 막힌 이유를 푸터에 보여 준다. 본문이 스크롤되어 상태 줄이 가려져도 알 수 있게 한다."""
@@ -136,10 +183,18 @@ class MainWindow(QMainWindow):
             self.step2.refresh_freshness()               # 다른 프로그램에서 파일을 고치고 돌아온 경우를 감지한다
 
     def closeEvent(self, event) -> None:
+        if self.generation.busy:
+            # 저장 중에는 닫을 수 없다: 워커·세션·위젯을 건드리지 않고 거부만 한다(강제 종료는 지원하지 않는다)
+            event.ignore()
+            self.statusBar().showMessage("저장 중에는 창을 닫을 수 없습니다. 저장이 끝난 뒤 닫을 수 있습니다.", 8000)
+            self.step3.show_close_blocked()
+            return
+        self.generation.close()                          # 이후에 늦게 도착하는 결과는 무시한다
         self.step2.leave()
-        shutdown = getattr(self.context.runner, "shutdown", None)
-        if shutdown:
-            shutdown()
+        for runner in {id(r): r for r in (self.context.runner, self.context.gen_runner)}.values():
+            shutdown = getattr(runner, "shutdown", None)
+            if shutdown:
+                shutdown()
         super().closeEvent(event)
 
     def set_step_ready(self, step: Step, ready: bool) -> None:
@@ -148,16 +203,25 @@ class MainWindow(QMainWindow):
     def _sync(self) -> None:
         nav = self.navigator
         self.stack.setCurrentIndex(int(nav.current) - 1)
-        self.stepper.set_state(current=int(nav.current) - 1, done={int(s) - 1 for s in nav.completed})
+        self.stepper.set_state(current=int(nav.current) - 1, done={int(s) - 1 for s in nav.completed} | ({int(Step.RESULT) - 1} if self.generation.done else set()))
         self.back_button.setEnabled(nav.can_back())
         self.next_button.setEnabled(nav.can_next())
         self.next_button.setVisible(nav.current < Step.RESULT)
         self.next_button.setText({Step.FILE: "다음: 지급내역 확인", Step.REVIEW: "지급명단 생성"}.get(nav.current, "다음"))
-        self.next_button.setToolTip("아직 제공되지 않는 기능입니다(개발 중)." if nav.current == Step.REVIEW else "")
+        self.next_button.setToolTip("")
         if nav.current != self._shown:
             prev, self._shown = self._shown, nav.current
-            if prev == Step.REVIEW:
-                self.step2.leave()                       # 이전 단계로: 진행 중 결과와 비밀번호 시도를 모두 버린다
+            if prev == Step.REVIEW and nav.current == Step.FILE:
+                self.step2.leave()                       # 처음 단계로: 진행 중 결과와 비밀번호 시도를 모두 버린다
+                self.generation.reset()
+            elif prev == Step.RESULT and nav.current == Step.FILE:
+                self.step2.leave()
+                self.generation.reset()
             if nav.current == Step.REVIEW:
-                self.step2.enter(self.model.snapshot())
+                if prev == Step.RESULT:
+                    self.step2.enter(self.step2._selection, resume=True)     # 이미 있는 확인 결과를 그대로 보여 준다(다시 읽지 않음)
+                else:
+                    self.step2.enter(self.model.snapshot())
+            elif nav.current == Step.RESULT:
+                self.step3.enter(self.step2._selection)  # 확인 결과를 버리지 않고 생성을 시작한다
         self._sync_hint()
