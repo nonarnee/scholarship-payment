@@ -33,9 +33,10 @@ def make_input(tmp_path):
     """합성 입력 파일을 만들고 `mutate(ws)`로 변형한다. 실제 다운로드 원본처럼 B·V·X 열과 합계행 일부는 빈 문자열 셀로 저장한다."""
     counter = {"n": 0}
 
-    def _make(n=45, id_mode="numeric", mutate=None):
-        wb = mk.build_input(n, id_mode)
+    def _make(n=45, id_mode="numeric", mutate=None, extra=()):
+        wb = mk.build_input(n, id_mode, extra)
         ws = wb.active
+        n += len(extra)
         if mutate is not None:
             mutate(ws)
         total = 3 + n

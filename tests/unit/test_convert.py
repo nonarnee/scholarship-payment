@@ -84,8 +84,8 @@ def test_input_stage_failure(make_input, out):
 
 
 def test_validation_stage_failure_duplicate_ids(make_input, out):
-    exc = failure(make_input(mutate=lambda ws: ws.__setitem__("F6", ws["F5"].value)), out)
-    assert exc.stage == "validate" and {("DUPLICATE_STUDENT_ID", "student_id", 5), ("DUPLICATE_STUDENT_ID", "student_id", 6)} <= triples(exc)
+    exc = failure(make_input(mutate=lambda ws: ws.__setitem__("F7", ws["F5"].value)), out)
+    assert exc.stage == "validate" and {("DUPLICATE_STUDENT_ID", "student_id", 5), ("DUPLICATE_STUDENT_ID", "student_id", 7)} <= triples(exc)
     assert list(out.iterdir()) == []
 
 
@@ -151,7 +151,7 @@ def test_cli_success(make_input, out, capsys):
 
 
 def test_cli_failure_exit_code_and_no_file(make_input, out, capsys):
-    code = cli.main(["convert", "--program", "daechung", "--input", str(make_input(mutate=lambda ws: ws.__setitem__("F6", ws["F5"].value))),
+    code = cli.main(["convert", "--program", "daechung", "--input", str(make_input(mutate=lambda ws: ws.__setitem__("F7", ws["F5"].value))),
                      "--out-dir", str(out), "--template", str(TEMPLATE)])
     err = capsys.readouterr().err
     assert code == 1 and "DUPLICATE_STUDENT_ID" in err and "파일을 만들지 않았습니다" in err and list(out.iterdir()) == []

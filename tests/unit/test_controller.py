@@ -37,7 +37,7 @@ def test_bad_policy_never_falls_back_to_synthetic(make_input, out, tmp_path):
 
 
 def test_validation_failure_reports_codes_only(make_input, out):
-    o = run_conversion("daechung", make_input(mutate=lambda ws: ws.__setitem__("F6", ws["F5"].value)), out, TEMPLATE)
+    o = run_conversion("daechung", make_input(mutate=lambda ws: ws.__setitem__("F7", ws["F5"].value)), out, TEMPLATE)
     assert not o.ok and o.stage == "validate" and any("DUPLICATE_STUDENT_ID" in d for d in o.details) and list(out.iterdir()) == []
     assert "가상001" not in " ".join(o.details)
 

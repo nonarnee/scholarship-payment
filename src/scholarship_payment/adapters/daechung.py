@@ -5,10 +5,15 @@
 - `A·B·V·W·X` 열은 읽지 않으며 지급 대상자 필터에 쓰지 않는다(결정).
 - 중복 학번·0원·음수·대상자 0명 같은 업무 규칙은 판단하지 않는다(OPEN H5·M10). 0명은 배치를 만들 수 없어 차단한다.
 - 원본은 읽기만 한다(저장하지 않음).
+- **이월·기관 변경으로 한 학생이 연속 여러 행**이면(같은 학번) 학생당 1행으로 합산한다(M29·M30): 시간·금액은 합계, 나머지는 맨 위 행.
+  성명·은행·계좌가 다르거나 시급이 다르면 차단한다. 지급월은 맨 위 행의 년월이며, 아래 행의 년월이 더 늦으면 차단한다.
+  이월(더 이른 년월)과 합산은 차단하지 않는 **참고**(`AdapterResult.notes`)로만 남긴다. 연속하지 않은 같은 학번은 합치지 않는다(Validator 가 중복으로 차단).
+- AI멘토링은 같은 양식이며 `fixed_rate`(시급 고정)를 주면 각 행의 시급이 같아야 하고, 합산 금액 × 60 = 합산 분 × 시급 이어야 한다.
 """
 from __future__ import annotations
 
 import re
+from dataclasses import replace
 from pathlib import Path
 
 from openpyxl import load_workbook
@@ -64,7 +69,9 @@ def _parse_year_month(value: object) -> tuple[int, int]:
 class DaechungAdapter:
     PROGRAM_CODE = "DAECHUNG"
 
-    def __init__(self, student_id_len: int | None = 8) -> None:
+    def __init__(self, student_id_len: int | None = 8, program_code: str = "DAECHUNG", fixed_rate: int | None = None) -> None:
+        self.PROGRAM_CODE = program_code
+        self.fixed_rate = fixed_rate
         # 8자리는 샘플에서 관찰된 규칙이다(OPEN M15). 숫자 셀의 학번은 선행 0이 이미 사라져 있어 길이 검사가 안전망이 된다.
         self.student_id_len = student_id_len
 
@@ -111,15 +118,14 @@ class DaechungAdapter:
 
         errors: list[ValidationError] = []
         warnings: list[ValidationError] = []
-        rows: list[PaymentRow] = []
-        year_months: set[tuple[int, int]] = set()
+        parsed: list[tuple[PaymentRow, tuple[int, int]]] = []
 
         for r in range(FIRST_DATA_ROW, total_row):
             seq = ws.cell(r, 3).value
             if isinstance(seq, int) and not isinstance(seq, bool):
-                row = self._parse_row(ws, r, errors, warnings, year_months)
-                if row is not None:
-                    rows.append(row)
+                got = self._parse_row(ws, r, errors, warnings)
+                if got is not None:
+                    parsed.append(got)
             elif all(_blank(ws.cell(r, c).value) for c in range(1, LAST_COLUMN + 1)):
                 errors.append(ValidationError("ROW_BLANK_IN_DATA", "rows", r))
             else:
@@ -127,6 +133,8 @@ class DaechungAdapter:
         for r in range(total_row + 1, max_row + 1):
             if any(not _blank(ws.cell(r, c).value) for c in range(1, LAST_COLUMN + 1)):
                 errors.append(ValidationError("CONTENT_AFTER_TOTAL", "rows", r))
+
+        rows, year_months, notes = self._merge_students(parsed, errors)
 
         if total_row == FIRST_DATA_ROW and not errors:
             errors.append(ValidationError("NO_DATA_ROWS", "rows"))      # 0명 정책 미확정(M10): 배치를 만들 수 없어 차단
@@ -142,9 +150,53 @@ class DaechungAdapter:
         (year, month), = year_months
         batch = PaymentBatch(program_code=self.PROGRAM_CODE, year=year, month=month, rows=rows)
         warnings.sort(key=lambda w: (w.row or 0, w.code))
-        return AdapterResult(batch=batch, source_totals=totals, warnings=tuple(warnings))
+        notes.sort(key=lambda w: (w.row or 0, w.code))
+        return AdapterResult(batch=batch, source_totals=totals, warnings=tuple(warnings), notes=tuple(notes))
 
-    def _parse_row(self, ws, r, errors, warnings, year_months) -> PaymentRow | None:
+    def _merge_students(self, parsed, errors):
+        """같은 학번이 연속된 행을 학생당 1행으로 합친다. 반환: (학생 행, 지급월 집합, 참고)."""
+        groups: list[list] = []
+        for item in parsed:
+            if groups and groups[-1][0][0].student_id == item[0].student_id:
+                groups[-1].append(item)
+            else:
+                groups.append([item])
+        rows: list[PaymentRow] = []
+        months: set[tuple[int, int]] = set()
+        notes: list[ValidationError] = []
+        for g in groups:
+            top, top_ym = g[0]
+            bad = False
+            for row, ym in g[1:]:
+                if row.name != top.name:
+                    errors.append(ValidationError("GROUP_STUDENT_MISMATCH", "name", row.source_row))
+                    bad = True
+                if (row.bank_name, row.account_no) != (top.bank_name, top.account_no):
+                    errors.append(ValidationError("GROUP_ACCOUNT_MISMATCH", "account_no", row.source_row))
+                    bad = True
+                if row.hourly_rate != top.hourly_rate:
+                    errors.append(ValidationError("GROUP_RATE_MISMATCH", "hourly_rate", row.source_row))
+                    bad = True
+                if ym > top_ym:
+                    errors.append(ValidationError("CARRYOVER_MONTH_INVALID", "year_month", row.source_row))
+                    bad = True
+                elif ym < top_ym:
+                    notes.append(ValidationError("CARRYOVER_ROW", "year_month", row.source_row))
+            if bad:
+                continue
+            minutes = sum(x.minutes for x, _ in g)
+            amount = sum(x.pay_amount for x, _ in g)
+            if self.fixed_rate is not None and amount * 60 != minutes * self.fixed_rate:
+                errors.append(ValidationError("AMOUNT_RATE_MISMATCH", "pay_amount", top.source_row))
+                continue
+            if len(g) > 1:
+                notes.append(ValidationError("STUDENT_MERGED_ROWS", "rows", top.source_row))
+                top = replace(top, minutes=minutes, pay_amount=amount)
+            months.add(top_ym)
+            rows.append(top)
+        return rows, months, notes
+
+    def _parse_row(self, ws, r, errors, warnings) -> tuple[PaymentRow, tuple[int, int]] | None:
         failed = False
 
         def get(col):
@@ -169,6 +221,9 @@ class DaechungAdapter:
         hourly_rate = optional_int("L", "hourly_rate")
         headcount = optional_int("K", "headcount")
         ym = attempt(_parse_year_month, get("D"))
+        if self.fixed_rate is not None and hourly_rate != self.fixed_rate:
+            errors.append(ValidationError("RATE_NOT_FIXED", "hourly_rate", r))
+            failed = True
         if failed:
             return None
         try:
@@ -181,9 +236,8 @@ class DaechungAdapter:
         except ValidationError as e:
             errors.append(e)
             return None
-        year_months.add(ym)
         self._collect_warnings(get, r, pay_amount, warnings)
-        return row
+        return row, ym
 
     @staticmethod
     def _collect_warnings(get, r, pay_amount, warnings) -> None:

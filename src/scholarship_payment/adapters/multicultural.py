@@ -8,7 +8,7 @@
   각 행의 총금액은 `시간 × 시급`과 정확히 같아야 하며, 다르면 차단한다. 총금액은 원본 값을 쓴다.
 - 묶음의 소계 행과 맨 아래 합계 행은 데이터 행 합계와 일치해야 한다.
 - 시급이 다른 기관이 섞인 학생은 명단 시급 칸에 `위 행 시급 / 아래 행 시급`(예: `18,000 / 14,000`)으로 문자열 표시한다.
-- 근무형태 앞의 활동월(`04월 …`)이 지급월과 다르면 이월로 보고 경고(`CARRYOVER_ROW`)만 낸다. 활동월이 지급월보다 늦은 경우는
+- 근무형태 앞의 활동월(`04월 …`)이 지급월과 다르면 이월로 보고 참고(`CARRYOVER_ROW`, `notes`)만 남긴다. 행 합산도 참고(`STUDENT_MERGED_ROWS`)다. 활동월이 지급월보다 늦은 경우는
   지급월이 1·2월(학년도 경계)일 때만 허용하고 그 밖에는 차단한다. 년월 열은 모든 행이 같아야 한다.
 - 사업자등록번호는 원본에 없어 빈 값이다. 멘티 인원은 맨 위 행 기준 1명이다.
 - 년월(`YYYY-MM`)·성명·학번·학과는 학생의 행이 둘 이상이면 첫 행에만 있다(둘째 행부터 빈 칸은 첫 행 값을 쓴다). 값이 있으면 학번·성명은 첫 행과 같아야 하고 년월은 모든 행이 같아야 한다.
@@ -92,6 +92,7 @@ class MulticulturalAdapter:
             raise InputValidationFailed([ValidationError("TOTAL_ROW_MISSING", "total_row")])
         errors: list[ValidationError] = []
         warnings: list[ValidationError] = []
+        notes: list[ValidationError] = []
         group: list[dict] = []
         students: list[PaymentRow] = []
         src_minutes = src_amount = 0
@@ -106,7 +107,7 @@ class MulticulturalAdapter:
                 else:
                     group.append({"bad": True, "row": r})
             elif _norm(ws.cell(r, 7).value) == "소계":
-                row = self._close_group(ws, r, group, errors, warnings)
+                row = self._close_group(ws, r, group, errors, warnings, notes)
                 if row is not None:
                     students.append(row)
                     src_minutes += row.minutes
@@ -134,7 +135,8 @@ class MulticulturalAdapter:
         (year, month), = yms
         batch = PaymentBatch(program_code=self.PROGRAM_CODE, year=year, month=month, rows=students)
         warnings.sort(key=lambda w: (w.row or 0, w.code))
-        return AdapterResult(batch=batch, source_totals=totals, warnings=tuple(warnings))
+        notes.sort(key=lambda w: (w.row or 0, w.code))
+        return AdapterResult(batch=batch, source_totals=totals, warnings=tuple(warnings), notes=tuple(notes))
 
     def _parse_data_row(self, ws, r, errors, yms, top=None) -> dict | None:
         failed = False
@@ -186,7 +188,7 @@ class MulticulturalAdapter:
                 "dept": top.get("dept") if inherit("G", "dept") else _text(g("G")), "org": _text(g("I")),
                 "bank": _text(g("O")), "account": account, "minutes": minutes, "amount": amount, "rate": rate}
 
-    def _close_group(self, ws, r, group, errors, warnings) -> PaymentRow | None:
+    def _close_group(self, ws, r, group, errors, warnings, notes) -> PaymentRow | None:
         if not group:
             errors.append(ValidationError("SUBTOTAL_WITHOUT_DATA", "rows", r))
             return None
@@ -199,9 +201,9 @@ class MulticulturalAdapter:
                 return None
         distinct = list(dict.fromkeys(rec["rate"] for rec in group))          # 위(최근) 행부터, 중복 제거
         if len(distinct) > 1:
-            warnings.append(ValidationError("RATE_MIXED_IN_GROUP", "hourly_rate", r))
+            notes.append(ValidationError("RATE_MIXED_IN_GROUP", "hourly_rate", r))
         if any(rec["carry"] for rec in group):
-            warnings.append(ValidationError("CARRYOVER_ROW", "work_type", top["row"]))
+            notes.append(ValidationError("CARRYOVER_ROW", "work_type", top["row"]))
         minutes = sum(rec["minutes"] for rec in group)
         amount = sum(rec["amount"] for rec in group)
         try:
@@ -214,7 +216,7 @@ class MulticulturalAdapter:
             errors.append(ValidationError("SUBTOTAL_MISMATCH", "subtotal", r))
             return None
         if len(group) > 1:
-            warnings.append(ValidationError("STUDENT_MERGED_ROWS", "rows", top["row"]))
+            notes.append(ValidationError("STUDENT_MERGED_ROWS", "rows", top["row"]))
         try:
             return PaymentRow(
                 source_row=top["row"], student_id=top["student_id"], name=top["name"], account_no=top["account"],
