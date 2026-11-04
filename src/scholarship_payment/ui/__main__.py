@@ -14,18 +14,34 @@ from scholarship_payment.ui.navigation import Step
 from scholarship_payment.ui.theme import apply_theme
 
 
+def install_safe_excepthook() -> None:
+    """처리되지 않은 예외는 종류만 출력한다. 예외 문구·추적 정보에는 파일 이름·경로가 들어갈 수 있다.
+    개발 중 자세한 정보가 필요하면 환경변수 SCHOLARSHIP_UI_DEBUG=1 을 설정한다."""
+    import os
+
+    original = sys.excepthook
+
+    def hook(exc_type, exc, tb):
+        if os.environ.get("SCHOLARSHIP_UI_DEBUG") == "1":
+            original(exc_type, exc, tb)
+        else:
+            print(f"예기치 않은 오류가 발생했습니다: {exc_type.__name__}", file=sys.stderr)
+
+    sys.excepthook = hook
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="scholarship_payment.ui")
     ap.add_argument("--gallery", action="store_true", help="컴포넌트 갤러리를 연다")
     ap.add_argument("--smoke", action="store_true", help="창을 만들어 그려 본 뒤 종료한다")
     args = ap.parse_args(argv)
 
+    install_safe_excepthook()
     app = QApplication.instance() or QApplication(sys.argv[:1])
     apply_theme(app)
     window = build_gallery() if args.gallery else MainWindow()
     if not args.gallery and not args.smoke:
-        for step in (Step.FILE, Step.REVIEW):          # 개발용: 자리표시 화면을 눌러 볼 수 있도록 선행 조건을 열어 둔다
-            window.set_step_ready(step, True)
+        window.set_step_ready(Step.REVIEW, True)         # 개발용: Step 2 자리표시 화면 뒤로 갈 수 있게(Step 1 은 실제 입력 상태로 결정)
     window.show()
     app.processEvents()
     if args.smoke:
