@@ -176,3 +176,16 @@ def test_blank_year_month_on_the_first_row_is_still_an_error(make_mc_input, synt
 
 def test_different_year_month_on_a_following_row_is_still_blocked(make_mc_input, synthetic):
     assert ("MONTH_MIXED", None) in fail(make_mc_input(students=two_orgs(synthetic), mutate=lambda ws: (ws.__setitem__("D6", "9999-08"), ws.__setitem__("H6", "08월 방문(가상A)"))))
+
+
+def test_name_student_id_and_department_appear_only_on_the_first_row_of_a_student(make_mc_input, synthetic):
+    path = make_mc_input(students=two_orgs(synthetic))
+    from openpyxl import load_workbook
+    ws = load_workbook(path).active
+    assert ws["F5"].value and ws["F6"].value is None and ws["E6"].value is None and ws["G6"].value is None
+    r = read(path).batch.rows[1]
+    assert r.student_id == ws["F5"].value and r.name == ws["E5"].value and r.department == ws["G5"].value
+
+
+def test_blank_student_id_on_the_first_row_is_still_an_error(make_mc_input, synthetic):
+    assert ("ID_EMPTY", 5) in fail(make_mc_input(students=two_orgs(synthetic), mutate=lambda ws: ws.__setitem__("F5", None)))

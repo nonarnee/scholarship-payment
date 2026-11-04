@@ -34,8 +34,15 @@ jobs:
           pyinstaller --noconfirm --onefile --windowed --name ScholarshipPayment
           --paths src --collect-submodules msoffcrypto
           packaging/run_gui.py
+      - name: Version
+        id: ver
+        shell: bash
+        run: |
+          v=$(python -c "import scholarship_payment as s; print(s.__version__)")
+          echo "name=ScholarshipPayment-v${v}-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+          mv dist/ScholarshipPayment.exe "dist/ScholarshipPayment-v${v}.exe"
       - uses: actions/upload-artifact@v4
         with:
-          name: ScholarshipPayment-windows
-          path: dist/ScholarshipPayment.exe
+          name: ${{ steps.ver.outputs.name }}
+          path: dist/ScholarshipPayment-v*.exe
           if-no-files-found: error
