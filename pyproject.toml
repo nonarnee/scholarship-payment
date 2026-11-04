@@ -1,12 +1,15 @@
 [project]
 name = "scholarship-payment"
-version = "0.0.0"
+dynamic = ["version"]
 description = "한국장학재단 월별지급승인 엑셀을 대학 표준 지급명단으로 변환하는 오프라인 도구 (개발 중)"
 requires-python = ">=3.12"
 dependencies = ["openpyxl>=3.1", "msoffcrypto-tool>=5.4"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8"]
+
+[tool.setuptools.dynamic]
+version = {attr = "scholarship_payment.__version__"}
 
 [tool.setuptools.packages.find]
 where = ["src"]

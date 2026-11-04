@@ -8,6 +8,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+from scholarship_payment import __version__
 from scholarship_payment.app.controller import run_conversion
 from scholarship_payment.config.default_paths import default_policy_path, default_template_path, search_dirs
 from scholarship_payment.config.policy_builder import HIDDEN_FOR, PROMPTS, RATES_PROMPT, make_policy_file
@@ -31,7 +32,7 @@ def main() -> None:
     from tkinter import filedialog, simpledialog, ttk
 
     root = tk.Tk()
-    root.title("장학금 지급명단 변환")
+    root.title(f"장학금 지급명단 변환 v{__version__}")
     root.geometry("720x520")
     v_in, v_out = tk.StringVar(), tk.StringVar()
     v_prog = tk.StringVar(value=next(iter(PROGRAMS)))
