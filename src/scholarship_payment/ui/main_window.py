@@ -3,13 +3,15 @@ Windows 기본 제목 표시줄을 쓴다. 업무 처리는 하지 않는다.
 """
 from __future__ import annotations
 
-from PySide6.QtCore import QSize, Qt
+from PySide6.QtCore import QEvent, QSize, Qt
 from PySide6.QtWidgets import (QFrame, QHBoxLayout, QLabel, QMainWindow, QScrollArea, QStackedWidget, QVBoxLayout, QWidget)
 
 from scholarship_payment import __version__
 from scholarship_payment.ui.context import AppContext
 from scholarship_payment.ui.navigation import STEP_TITLES, Navigator, Step
+from scholarship_payment.ui.preview import PreviewSession
 from scholarship_payment.ui.state import Step1Model
+from scholarship_payment.ui.step2 import Step2Page
 from scholarship_payment.ui.step1 import BLOCKING_LABELS, Step1Page
 from scholarship_payment.ui.theme import FOOTER_HEIGHT, SPACING, STEPPER_HEIGHT, fit_window_size
 from scholarship_payment.ui.widgets import AppButton, Card, StepperBar
@@ -66,9 +68,11 @@ class MainWindow(QMainWindow):
 
         self.model = Step1Model(self.context.store, self.context.runner, today=self.context.today, default_dirs=self.context.default_dirs)
         self.step1 = Step1Page(self.model, self.context)
+        self.step2 = Step2Page(PreviewSession(self.context.runner), self.context)
         self.stack = QStackedWidget()
         for s in Step:
-            self.stack.addWidget(self.step1 if s == Step.FILE else _placeholder(s))
+            self.stack.addWidget({Step.FILE: self.step1, Step.REVIEW: self.step2}.get(s) or _placeholder(s))
+        self._shown = Step.FILE
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
@@ -103,6 +107,7 @@ class MainWindow(QMainWindow):
         self.setTabOrder(self.back_button, self.next_button)
         self.navigator.on_change(self._sync)
         self.model.on_change(self._sync_ready)
+        self.step2.session.on_change(self._sync_hint)
         self._sync_ready()
         self._sync()
 
@@ -118,11 +123,20 @@ class MainWindow(QMainWindow):
         self._sync_hint()
 
     def _sync_hint(self) -> None:
-        """다음 버튼이 막힌 이유(아직 필요한 입력)를 푸터에 보여 준다. 본문이 스크롤되어 상태 줄이 가려져도 알 수 있게 한다."""
+        """다음 버튼이 막힌 이유를 푸터에 보여 준다. 본문이 스크롤되어 상태 줄이 가려져도 알 수 있게 한다."""
+        if self.navigator.current == Step.REVIEW:
+            self.footer_hint.setText(self.step2.hint_text())
+            return
         needed = [BLOCKING_LABELS[f] for f in self.model.blocking()] if self.navigator.current == Step.FILE else []
         self.footer_hint.setText("필요: " + ", ".join(needed) if needed else "")
 
+    def changeEvent(self, event) -> None:
+        super().changeEvent(event)
+        if event.type() == QEvent.Type.ActivationChange and self.isActiveWindow() and self.navigator.current == Step.REVIEW:
+            self.step2.refresh_freshness()               # 다른 프로그램에서 파일을 고치고 돌아온 경우를 감지한다
+
     def closeEvent(self, event) -> None:
+        self.step2.leave()
         shutdown = getattr(self.context.runner, "shutdown", None)
         if shutdown:
             shutdown()
@@ -138,5 +152,12 @@ class MainWindow(QMainWindow):
         self.back_button.setEnabled(nav.can_back())
         self.next_button.setEnabled(nav.can_next())
         self.next_button.setVisible(nav.current < Step.RESULT)
-        self.next_button.setText("다음: 지급내역 확인" if nav.current == Step.FILE else "다음")
+        self.next_button.setText({Step.FILE: "다음: 지급내역 확인", Step.REVIEW: "지급명단 생성"}.get(nav.current, "다음"))
+        self.next_button.setToolTip("아직 제공되지 않는 기능입니다(개발 중)." if nav.current == Step.REVIEW else "")
+        if nav.current != self._shown:
+            prev, self._shown = self._shown, nav.current
+            if prev == Step.REVIEW:
+                self.step2.leave()                       # 이전 단계로: 진행 중 결과와 비밀번호 시도를 모두 버린다
+            if nav.current == Step.REVIEW:
+                self.step2.enter(self.model.snapshot())
         self._sync_hint()

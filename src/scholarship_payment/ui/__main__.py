@@ -41,7 +41,7 @@ def main(argv: list[str] | None = None) -> int:
     apply_theme(app)
     window = build_gallery() if args.gallery else MainWindow()
     if not args.gallery and not args.smoke:
-        window.set_step_ready(Step.REVIEW, True)         # 개발용: Step 2 자리표시 화면 뒤로 갈 수 있게(Step 1 은 실제 입력 상태로 결정)
+        pass
     window.show()
     app.processEvents()
     if args.smoke:

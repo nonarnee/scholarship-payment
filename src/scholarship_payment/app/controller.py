@@ -21,7 +21,7 @@ MAX_LINES = 50
 @dataclass(frozen=True)
 class Outcome:
     ok: bool
-    stage: str                    # "ok" | "args" | "policy" | input/template/validate/write/output
+    stage: str                    # "ok" | "args" | "policy" | input/template/validate/write/output | "changed"(입력 파일이 바뀌었거나 읽을 수 없게 됨)
     summary: str
     details: tuple[str, ...] = ()
     output_path: Path | None = None
@@ -55,6 +55,8 @@ def run_conversion(program: str, input_path, out_dir, template_path, policy_path
     try:
         r = convert(program, Path(input_path), Path(out_dir), Path(template_path), policy=policy, base_date=base_date, today=today, password=password)
     except ConversionFailed as e:
+        if e.stage == "changed":                      # 변환 도중 입력 파일이 바뀌었거나 읽을 수 없게 됨: 파일을 만들지 않았다
+            return Outcome(False, "changed", "변환 실패: 입력 파일이 바뀌었거나 읽을 수 없어 파일을 만들지 않았습니다. 파일을 확인하고 다시 실행하세요.", _lines(e.errors))
         extra: tuple[str, ...] = ()
         if e.stage == "template" and not policy_path:
             extra = ("(합성 정책으로 실행 중입니다. 실제 템플릿이면 정책 파일(--policy)이 필요할 수 있습니다.)",)
