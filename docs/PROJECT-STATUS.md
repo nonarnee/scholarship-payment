@@ -18,6 +18,7 @@
 | 정책 파일 만들기(`config/policy_builder.py`, 화면 버튼·`make-policy` 명령) · 은행코드 누락 은행명 안내 | **구현됨**(합성 테스트 24개). 화면 대화상자는 미실행. 은행코드 표 보완은 **사용자가 템플릿의 `은행코드` 시트를 직접 채우는 방식으로 확정(2026-11-03)** |
 | 기본 정책·템플릿 자동 채움(`config/default_paths.py`) | **구현됨**: 화면이 exe 폴더 또는 `%APPDATA%\ScholarshipPayment`의 `policy_daechung.json`·`template_daechung.xlsx`를 찾아 칸을 미리 채움(내용은 변환 때 검증). 실제 정책 파일은 저장소에 두지 않음 |
 | EXE / GitHub Actions | 설정 작성됨(`.github/workflows/build-windows.yml`, `packaging/`): Windows 러너에서 안전 검사·테스트·합성 종단 스모크·Tk 확인·PyInstaller 빌드. **러너 실행 결과는 PR의 Actions 기록으로 확인**하며, 만든 exe를 실제로 실행해 본 적은 없음 |
+| 배포·SmartScreen | exe 에 코드 서명 없음(예산 미사용 결정). 빌드를 폴더 방식(onedir)+버전 리소스+SHA256SUMS 로 변경(2026-11-04), 절차는 `docs/DISTRIBUTION.md`. **Windows 에서 경고가 실제로 줄었는지는 미검증** |
 | 공개 안전 체계 | 구현됨 (검사기, pre-commit 훅, `.gitignore`, 합성 데이터 생성기) |
 | 불변조건 자동 테스트 | DI·FP 대부분이 합성 데이터에서 자동 테스트됨(§4). **실제 템플릿·실자료·Windows Excel·업로드 시스템은 미검증** |
 | Windows Excel 실검증 | **미수행** |

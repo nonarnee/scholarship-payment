@@ -29,20 +29,22 @@ jobs:
         run: python packaging/ci_smoke.py
       - name: Tk available
         run: python -c "import tkinter; r = tkinter.Tk(); r.destroy(); print('tk ok')"
-      - name: Build exe
-        run: >
-          pyinstaller --noconfirm --onefile --windowed --name ScholarshipPayment
-          --paths src --collect-submodules msoffcrypto
-          packaging/run_gui.py
-      - name: Version
-        id: ver
+      - name: Build app folder (onedir)
+        id: build
         shell: bash
         run: |
           v=$(python -c "import scholarship_payment as s; print(s.__version__)")
-          echo "name=ScholarshipPayment-v${v}-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
-          mv dist/ScholarshipPayment.exe "dist/ScholarshipPayment-v${v}.exe"
+          n="ScholarshipPayment-v${v}"
+          python packaging/make_version_info.py version_info.txt
+          pyinstaller --noconfirm --onedir --windowed --name "$n" \
+            --version-file version_info.txt \
+            --paths src --collect-submodules msoffcrypto \
+            packaging/run_gui.py
+          (cd "dist/$n" && sha256sum "$n.exe" > SHA256SUMS.txt && cat SHA256SUMS.txt)
+          echo "name=${n}-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+          echo "dir=dist/$n" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@v4
         with:
-          name: ${{ steps.ver.outputs.name }}
-          path: dist/ScholarshipPayment-v*.exe
+          name: ${{ steps.build.outputs.name }}
+          path: ${{ steps.build.outputs.dir }}
           if-no-files-found: error
