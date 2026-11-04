@@ -82,3 +82,6 @@ secrets/
 !tests/fixtures/
 !tests/fixtures/synthetic/
 !tests/fixtures/synthetic/synthetic_*.xlsx
+
+# CI 빌드가 만드는 임시 파일
+version_info.txt
