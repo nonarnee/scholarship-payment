@@ -52,7 +52,7 @@ def test_footer_buttons_follow_navigator(qapp, make_context, ready_settings, mak
     win.model.set_source(make_input(n=2))                    # Step 1 준비 상태는 실제 입력이 결정한다(강제로 켜지 않음)
     assert win.next_button.isEnabled()
     win.next_button.click()
-    assert win.navigator.current is Step.REVIEW and win.back_button.isEnabled() and not win.next_button.isEnabled()
+    assert win.navigator.current is Step.REVIEW and win.back_button.isEnabled() and win.next_button.isEnabled()      # 미리보기가 준비되면 '지급명단 생성'을 누를 수 있다
     assert win.stack.currentIndex() == 1 and win.stepper.state_of(0) == "done" and win.stepper.state_of(1) == "current"
     win.back_button.click()
     assert win.navigator.current is Step.FILE and win.stack.currentIndex() == 0

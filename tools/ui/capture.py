@@ -231,7 +231,127 @@ def _step2(out_dir: Path, scale: float) -> None:
         save(w, "small_screen")
 
 
+def _step3(out_dir: Path, scale: float) -> None:
+    """Step 3(생성·결과)의 상태별 캡처. 모든 입력은 합성 데이터이고 저장 폴더도 임시 폴더다."""
+    os.environ["QT_QPA_PLATFORM"] = "offscreen"
+    import dataclasses
+    from datetime import datetime
+
+    from PySide6.QtCore import QSize
+    from PySide6.QtWidgets import QApplication
+
+    from openpyxl import load_workbook
+    from scholarship_payment.app import convert as conv
+    from scholarship_payment.app import workflow as wf
+    from scholarship_payment.config.policy_builder import make_policy_file
+    from scholarship_payment.config.user_settings import UserSettings
+    from scholarship_payment.ui.context import AppContext
+    from scholarship_payment.ui.main_window import MainWindow
+    from scholarship_payment.ui.runner import InlineRunner, ManualRunner
+    from scholarship_payment.ui.state import SettingsStore
+    from scholarship_payment.ui.theme import apply_theme
+
+    tag = f"{int(scale * 100)}"
+    app = QApplication([])
+    apply_theme(app)
+    mk = _synthetic()
+
+    class Acts:
+        def open_folder(self, p):
+            return True
+
+        def copy_text(self, t):
+            return True
+
+    class NoPick:
+        def __getattr__(self, name):
+            return lambda *a, **k: None
+
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = Path(tmp)
+        good_tpl = tmp / "synthetic_template.xlsx"
+        good_tpl.write_bytes((ROOT / "templates" / "synthetic_payment_template.xlsx").read_bytes())
+        bad_tpl = tmp / "bad_layout_template.xlsx"
+        wb = load_workbook(good_tpl)
+        del wb["WINS"]
+        wb.save(bad_tpl)
+        values = {"list_title": "합성 {year}년 {month}월 명단", "wins_work_name": "합성근로", "wris_gub_a": "ZZ0001", "wris_gub_b": "ZZ0002", "remit_info": "합성적요({month}월)"}
+        policy = make_policy_file(good_tpl, values, tmp / "policy_daechung.json", "daechung")
+        n = {"i": 0}
+
+        def src(name, rows=5, extra=()):
+            p = tmp / name
+            mk.build_input(rows, "numeric", extra).save(p)
+            return p
+
+        def window(template=good_tpl, gen_runner=None):
+            n["i"] += 1
+            out = tmp / f"결과{n['i']}"
+            out.mkdir()
+            store = SettingsStore(tmp / f"cfg{n['i']}" / "settings.json")
+            store.commit(UserSettings(last_program="daechung").with_paths("daechung", template_path=str(template), policy_path=str(policy), out_dir=str(out)))
+            ctx = AppContext(store=store, runner=InlineRunner(), chooser=NoPick(), today=lambda: date(2099, 10, 7), default_dirs=[], generation_runner=gen_runner, actions=Acts(),
+                             now=lambda: datetime(2099, 10, 7, 12, 34, 56))
+            w = MainWindow(available=QSize(1920, 1080), context=ctx)
+            w.show()
+            return w, out
+
+        def go(w, path):
+            w.step1.model.set_source(str(path))
+            w.next_button.click()
+            app.processEvents()
+            w.next_button.click()                      # 지급명단 생성
+            app.processEvents()
+
+        def save(w, name):
+            app.processEvents()
+            w.grab().save(str(out_dir / f"step3_{name}_{tag}.png"))
+            w.generation.close()
+            w.close()
+
+        w, out = window()
+        go(w, src("ok.xlsx"))
+        save(w, "success")
+        w, out = window()
+        real = conv.finish
+        wf.finish = lambda p, d: dataclasses.replace(real(p, d), warnings=(conv.ValidationError("SPLIT_AMOUNT_MISMATCH", "grant_interest", 4),))
+        go(w, src("warn.xlsx", 4, ((2, 480, "9999년08월"), (3, 90, "9999년08월"))))
+        wf.finish = real
+        save(w, "success_with_warnings_and_notes")
+        w, out = window()
+        (out / "지급명단_DAECHUNG_9999_09.xlsx").write_bytes(b"existing")
+        (out / ".~old_run.xlsx").write_bytes(b"leftover")
+        go(w, src("same_name.xlsx"))
+        save(w, "same_name_and_leftover")
+        r = ManualRunner()
+        w, out = window(gen_runner=r)
+        go(w, src("busy.xlsx"))
+        w.closeEvent(__import__("PySide6.QtGui", fromlist=["QCloseEvent"]).QCloseEvent())
+        save(w, "generating_close_blocked")
+        w, out = window(template=bad_tpl)
+        go(w, src("badtpl.xlsx"))
+        save(w, "failure_template")
+        w, out = window()
+        w.step1.model.set_source(str(src("folder.xlsx")))
+        w.next_button.click()
+        out.rmdir()
+        w.next_button.click()
+        save(w, "failure_folder")
+        w, out = window()
+        conv.verify_output, keep = (lambda *a, **k: (_ for _ in ()).throw(conv.ValidationFailed([conv.ValidationError("OUTPUT_TOTAL_MISMATCH", "amount", 9)]))), conv.verify_output
+        go(w, src("verify.xlsx"))
+        conv.verify_output = keep
+        save(w, "failure_verify")
+        w, out = window()
+        w.resize(910, 512)
+        go(w, src("small.xlsx", 4, ((2, 480, "9999년08월"),)))
+        save(w, "small_screen")
+
+
 def main(argv: list[str]) -> int:
+    if len(argv) >= 4 and argv[1] == "--step3":
+        _step3(Path(argv[2]), float(argv[3]))
+        return 0
     if len(argv) >= 4 and argv[1] == "--step2":
         _step2(Path(argv[2]), float(argv[3]))
         return 0
@@ -244,6 +364,7 @@ def main(argv: list[str]) -> int:
         env = {**os.environ, "QT_SCALE_FACTOR": str(scale), "QT_QPA_PLATFORM": "offscreen"}
         subprocess.run([sys.executable, __file__, "--one", str(out), str(scale)], env=env, check=True)
         subprocess.run([sys.executable, __file__, "--step2", str(out), str(scale)], env=env, check=True)
+        subprocess.run([sys.executable, __file__, "--step3", str(out), str(scale)], env=env, check=True)
     print("saved:", ", ".join(sorted(p.name for p in out.glob("*.png"))))
     return 0
 

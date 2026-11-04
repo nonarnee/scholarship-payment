@@ -67,3 +67,41 @@ def test_changes_are_reported_to_listeners():
 def test_invalid_step_value_is_rejected():
     with pytest.raises(ValueError):
         Navigator().set_ready(7, True)
+
+
+# ---------- 잠금(생성 중·성공 후): 이동을 모두 막고, reset 으로만 처음으로 ----------
+def test_locked_navigator_blocks_next_back_and_go_and_reset_unlocks():
+    nav = Navigator()
+    nav.set_ready(Step.FILE, True)
+    nav.set_ready(Step.REVIEW, True)
+    nav.next()
+    nav.next()
+    assert nav.current == Step.RESULT
+    nav.set_locked(True)
+    assert not nav.can_back() and not nav.can_next() and nav.back() is False and nav.go(Step.FILE) is False and nav.go(Step.REVIEW) is False
+    assert nav.current == Step.RESULT
+    nav.set_locked(False)
+    assert nav.can_back()
+    nav.set_locked(True)
+    nav.reset()
+    assert nav.current == Step.FILE and not nav.locked and nav.completed == set()
+
+
+def test_lock_notifies_listeners_once_per_change():
+    nav = Navigator()
+    calls = []
+    nav.on_change(lambda: calls.append(1))
+    nav.set_locked(True)
+    nav.set_locked(True)
+    nav.set_locked(False)
+    assert len(calls) == 2
+
+
+def test_go_backwards_never_loops_forever_when_back_is_refused(monkeypatch):
+    nav = Navigator()
+    nav.set_ready(Step.FILE, True)
+    nav.set_ready(Step.REVIEW, True)
+    nav.next()
+    nav.next()
+    monkeypatch.setattr(nav, "back", lambda: False)
+    assert nav.go(Step.FILE) is False and nav.current == Step.RESULT

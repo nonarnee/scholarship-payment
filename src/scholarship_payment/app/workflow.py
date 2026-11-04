@@ -3,10 +3,13 @@
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+import os
+from dataclasses import dataclass, field
+from datetime import datetime
+from pathlib import Path
 
 from scholarship_payment.adapters.source import PASSWORD_REQUIRED, PASSWORD_WRONG
-from scholarship_payment.app.convert import ConversionFailed, FileFingerprint, Issue, PolicySource, Prepared, fingerprint_file, prepare
+from scholarship_payment.app.convert import ConversionFailed, FileFingerprint, Issue, PolicySource, Prepared, finish, fingerprint_file, prepare
 from scholarship_payment.config.policy_file import load_policy
 from scholarship_payment.errors import ValidationError, ValidationFailed
 
@@ -121,4 +124,77 @@ def run_prepare(program: str, source_path, template_path, policy_path, base_date
     return PrepareOutcome(OK, prepared=prepared, summary=_summary(prepared))
 
 
-__all__ = ["IssueGroup", "PreviewSummary", "PrepareOutcome", "run_prepare", "group_issues", "Issue"]
+# ---------------------------------------------------------------- 생성(finish) 실행과 결과 분류
+FOLDER_CODES = frozenset({"OUTPUT_DIR_MISSING", "OUTPUT_PERMISSION", "OUTPUT_IO", "OUTPUT_NAME_EXHAUSTED"})
+KIND_CHANGED, KIND_TEMPLATE, KIND_FOLDER, KIND_VERIFY, KIND_UNEXPECTED = "changed", "template", "folder", "verify", "unexpected"
+TEMP_GLOB = ".~*.xlsx"            # safe_save 가 저장 중 임시로 쓰는 이름(남아 있는 것은 이전 실행이 중단된 흔적일 수 있다)
+
+
+@dataclass(frozen=True, repr=False)
+class FinishOutcome:
+    """`finish()` 한 번의 결과. 값은 엔진이 실제로 돌려준 것(저장된 경로·인원·`Prepared` 의 총액)과 저장 직후 측정한 크기·시각뿐이다.
+    repr 에는 상태만 나온다(경로·학생 값 없음)."""
+
+    status: str                                   # "ok" | "failed" | "changed"
+    kind: str | None = None                       # failed: template/folder/verify/unexpected, changed: "changed"
+    output_path: str | None = None
+    requested_name: str = ""
+    count: int = 0
+    total_amount: int = 0
+    size_bytes: int | None = None
+    finished_at: str | None = None
+    template_name: str = ""
+    warnings: tuple[IssueGroup, ...] = ()
+    notes: tuple[IssueGroup, ...] = ()
+    errors: tuple[IssueGroup, ...] = ()
+    changed_codes: dict = field(default_factory=dict)
+    leftover_temp: int = 0                        # 저장 폴더에 이미 있던 `.~*.xlsx` 개수(알리기만 하고 지우지 않는다)
+
+    @property
+    def name_changed(self) -> bool:
+        return bool(self.output_path) and Path(self.output_path).name != self.requested_name
+
+    def __repr__(self) -> str:
+        return f"FinishOutcome(status={self.status!r}, kind={self.kind!r})"
+
+
+def _count_leftover(out_dir) -> int:
+    try:
+        return sum(1 for _ in Path(out_dir).glob(TEMP_GLOB))
+    except (OSError, TypeError, ValueError):
+        return 0
+
+
+def run_finish(prepared: Prepared, out_dir, now=None) -> FinishOutcome:
+    """`convert.finish()` 를 실행하고 결과를 UI 가 다루기 쉬운 분류로 돌려준다. 어떤 예외도 밖으로 내보내지 않고 문구도 남기지 않는다.
+    성공 뒤의 크기·시각 측정이 실패해도 성공은 그대로다(후속 표시 오류를 생성 실패로 분류하지 않는다)."""
+    common = dict(requested_name=prepared.filename, count=prepared.count, total_amount=prepared.total_amount, template_name=Path(prepared._template_path).name)
+    try:
+        res = finish(prepared, out_dir)
+    except ConversionFailed as e:
+        if e.stage == "changed":
+            return FinishOutcome("changed", KIND_CHANGED, errors=group_issues(e.errors, "error"), changed_codes={x.field: x.code for x in e.errors}, **common)
+        codes = {x.code for x in e.errors}
+        if e.stage == "template":
+            kind = KIND_TEMPLATE
+        elif e.stage == "output":
+            kind = KIND_FOLDER if codes and codes <= FOLDER_CODES else KIND_VERIFY
+        else:
+            kind = KIND_UNEXPECTED
+        return FinishOutcome("failed", kind, errors=group_issues(e.errors, "error"), leftover_temp=_count_leftover(out_dir), **common)
+    except Exception:                                                    # 예외 문구에는 경로가 들어갈 수 있어 종류만 분류한다
+        return FinishOutcome("failed", KIND_UNEXPECTED, leftover_temp=_count_leftover(out_dir), **common)
+    try:
+        size = os.stat(res.output_path).st_size
+    except Exception:
+        size = None
+    try:
+        finished_at = (now or datetime.now)().strftime("%Y-%m-%d %H:%M:%S")
+    except Exception:
+        finished_at = None
+    return FinishOutcome("ok", None, output_path=os.fspath(res.output_path), size_bytes=size, finished_at=finished_at,
+                         warnings=group_issues(res.warnings, "warning"), notes=group_issues(res.notes, "note"),
+                         leftover_temp=_count_leftover(out_dir), **common)
+
+
+__all__ = ["IssueGroup", "PreviewSummary", "PrepareOutcome", "run_prepare", "group_issues", "Issue", "FinishOutcome", "run_finish"]

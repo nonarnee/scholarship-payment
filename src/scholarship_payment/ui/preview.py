@@ -14,8 +14,9 @@ from scholarship_payment.app import workflow
 from scholarship_payment.app.convert import Prepared, diagnose_changes
 from scholarship_payment.ui.runner import Runner
 
-IDLE, PREPARING, NEED_PASSWORD, READY, FAILED, INVALIDATED, CANCELLED, LOCKED = (
-    "idle", "preparing", "need_password", "ready", "failed", "invalidated", "cancelled", "locked")
+IDLE, PREPARING, NEED_PASSWORD, READY, FAILED, INVALIDATED, CANCELLED, LOCKED, CONSUMED = (
+    "idle", "preparing", "need_password", "ready", "failed", "invalidated", "cancelled", "locked", "consumed")
+REASON_FILES_CHANGED, REASON_GENERATION_FAILED = "files_changed", "generation_failed"
 MAX_ATTEMPTS = 3
 
 
@@ -59,8 +60,12 @@ class PreviewSession:
         self.errors: tuple[workflow.IssueGroup, ...] = ()
         self.missing_banks: tuple[str, ...] = ()
         self.changed: tuple[str, ...] = ()
+        self.invalid_reason: str | None = None            # 무효화 이유(files_changed | generation_failed)
+        self.invalid_after_generation = False             # 지급명단을 만들려던 중(생성 직전 확인)에 감지됐는가
         self.changed_codes: dict[str, str] = {}           # 파일 이름 → INPUT_FILE_CHANGED(바뀜·삭제) | INPUT_FILE_UNREADABLE(읽을 수 없음)
         self.last_password_wrong = False
+        self.invalid_reason = None
+        self.invalid_after_generation = False
 
     @property
     def busy(self) -> bool:
@@ -129,10 +134,28 @@ class PreviewSession:
         elif o.status == workflow.CHANGED:
             self.errors, self.changed = o.errors, tuple(f for g in o.errors for f in g.fields)
             self.changed_codes = {f: g.code for g in o.errors for f in g.fields}
+            self.invalid_reason = REASON_FILES_CHANGED
             self._set(INVALIDATED)
         else:
             self.errors, self.missing_banks = o.errors, o.missing_banks
             self._set(FAILED)
+
+    # --- 생성 단계와의 연계 ---
+    def invalidate(self, reason: str, changed_codes: dict | None = None, after_generation: bool = True) -> None:
+        """생성 단계에서 이 확인 결과를 더 쓸 수 없게 됐다(파일 변경·읽기 불가·생성 실패). 자동으로 다시 읽지 않는다."""
+        self._token += 1
+        self._reset_result()
+        self.changed_codes = dict(changed_codes or {})
+        self.changed = tuple(self.changed_codes)
+        self.invalid_reason = reason
+        self.invalid_after_generation = after_generation
+        self._set(INVALIDATED)
+
+    def consume(self) -> None:
+        """생성에 성공해 이 확인 결과를 사용했다. 같은 결과로 다시 만들 수 없게 지운다(새 변환은 처음부터)."""
+        self._token += 1
+        self._reset_result()
+        self._set(CONSUMED)
 
     # --- 변경 감지(미리보기 이후) ---
     def verify_fresh(self) -> None:
@@ -147,4 +170,5 @@ class PreviewSession:
             return
         self._reset_result()
         self.changed, self.changed_codes = tuple(changed), dict(changed)
+        self.invalid_reason = REASON_FILES_CHANGED
         self._set(INVALIDATED)

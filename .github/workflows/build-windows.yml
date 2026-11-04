@@ -82,6 +82,30 @@ jobs:
           Write-Output $line
           Add-Content $env:GITHUB_STEP_SUMMARY $line
           if ($p.ExitCode -ne 0) { exit 1 }
+      # 패키징된 exe 가 합성 입력으로 Step 1→2→3 생성 경로를 끝까지 실행하는지 확인한다(실제 자료·업무 로직 변경 없음).
+      # 확인 범위: 모듈 로딩·합성 Excel 파싱·정책/템플릿 로딩·미리보기·XLSX 생성과 출력 재검증·무덮어쓰기·암호 파일·폴더 오류 재시도.
+      # 확인하지 않는 범위: 실제 창·글꼴·DPI, 파일 선택 대화상자, 드래그 앤 드롭, 폴더 열기·클립보드, 실제 Excel 에서 열기.
+      - name: Prepare synthetic E2E inputs
+        run: python tools/ci/prepare_e2e_inputs.py "$env:RUNNER_TEMP/e2e"
+      - name: Synthetic E2E in the packaged exe (parse, preview, generate)
+        shell: pwsh
+        run: |
+          $work = Join-Path $env:RUNNER_TEMP "e2e"
+          $res = Join-Path $work "result.json"
+          $dir = "dist/ScholarshipPaymentUI-dev"
+          $t = Measure-Command { $p = Start-Process -FilePath "$dir/ScholarshipPaymentUI-dev.exe" -ArgumentList @("--synthetic-e2e-smoke", "--work-dir", $work, "--result-json", $res) -Wait -PassThru }
+          $line = "Packaged exe synthetic E2E: exit code $($p.ExitCode), time $([math]::Round($t.TotalSeconds,2)) s (offscreen, CI runner)"
+          Write-Output $line
+          Add-Content $env:GITHUB_STEP_SUMMARY $line
+          if (Test-Path $res) { Get-Content $res -Encoding UTF8 | Write-Output }
+          if ($p.ExitCode -ne 0) { exit 1 }
+      - name: Verify E2E outputs outside the exe (golden, no-overwrite, temp-file cleanup)
+        run: python tools/ci/verify_e2e_outputs.py "$env:RUNNER_TEMP/e2e" "$env:RUNNER_TEMP/e2e/result.json" --require-frozen
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ScholarshipPaymentUI-e2e-synthetic-outputs-${{ github.sha }}
+          path: ${{ runner.temp }}/e2e
+          if-no-files-found: error
       - uses: actions/upload-artifact@v4
         with:
           name: ScholarshipPaymentUI-dev-${{ github.sha }}
