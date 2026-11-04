@@ -7,6 +7,8 @@ dependencies = ["openpyxl>=3.1", "msoffcrypto-tool>=5.4"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8"]
+# 신규 화면(PySide6, 개발 중). 필수 의존성이 아니며 기존 Tkinter 화면·명령줄에는 필요 없다. LGPL-3.0 (docs/UI-FRAMEWORK.md)
+gui = ["PySide6-Essentials>=6.8,<7"]
 
 [tool.setuptools.dynamic]
 version = {attr = "scholarship_payment.__version__"}

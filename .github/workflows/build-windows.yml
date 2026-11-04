@@ -48,3 +48,42 @@ jobs:
           name: ${{ steps.build.outputs.name }}
           path: ${{ steps.build.outputs.dir }}
           if-no-files-found: error
+
+  # 신규 PySide6 화면(Phase 1) 확인용. 위 build 작업과 독립이며 배포 산출물에는 영향이 없다.
+  # 합격 기준은 두지 않는다: 폴더 크기와 smoke 실행 시간은 기록만 한다.
+  ui-foundation:
+    runs-on: windows-latest
+    env:
+      PYTHONUTF8: "1"
+      QT_QPA_PLATFORM: offscreen      # 러너에는 화면이 없으므로 offscreen 으로 그린다(DPI·실제 외관은 수동 확인)
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: python -m pip install -e ".[dev,gui]" pyinstaller==6.11.1
+      - name: UI tests
+        run: python -m pytest -q tests/ui
+      - name: Dev entry smoke (python)
+        run: python -m scholarship_payment.ui --smoke
+      - name: Build PySide6 folder (onedir)
+        run: >
+          pyinstaller --noconfirm --onedir --windowed --name ScholarshipPaymentUI-dev
+          --paths src --exclude-module PySide6.QtNetwork
+          packaging/run_ui_dev.py
+      - name: Smoke the built exe and record size/time
+        shell: pwsh
+        run: |
+          $dir = "dist/ScholarshipPaymentUI-dev"
+          $mb = [math]::Round(((Get-ChildItem $dir -Recurse -File | Measure-Object Length -Sum).Sum / 1MB), 1)
+          $t = Measure-Command { $p = Start-Process -FilePath "$dir/ScholarshipPaymentUI-dev.exe" -ArgumentList "--smoke" -Wait -PassThru }
+          $line = "PySide6 onedir: $mb MB, smoke exit code $($p.ExitCode), smoke time $([math]::Round($t.TotalSeconds,2)) s (offscreen, CI runner)"
+          Write-Output $line
+          Add-Content $env:GITHUB_STEP_SUMMARY $line
+          if ($p.ExitCode -ne 0) { exit 1 }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ScholarshipPaymentUI-dev-${{ github.sha }}
+          path: dist/ScholarshipPaymentUI-dev
+          if-no-files-found: error
