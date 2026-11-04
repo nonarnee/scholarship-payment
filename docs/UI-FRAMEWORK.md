@@ -23,9 +23,18 @@
 |---|---|
 | macOS(개발 Mac)에서 offscreen 위젯 생성·이벤트·화면 그리기(`grab`) | 확인(자동 테스트 46개, 100/125/150% 캡처 육안 확인) |
 | `python -m scholarship_payment.ui --smoke` 종료 코드 0 (Mac) | 확인 |
-| Windows 러너 빌드·smoke·폴더 크기·smoke 시간 | CI 작업 `ui-foundation`이 기록(실행 결과는 `PROJECT-STATUS.md`/PR의 Actions 기록 참조) |
+| Windows 러너(GitHub Actions windows-latest, Python 3.12.10) 빌드·smoke | 확인: 실행 41770914331(커밋 6f655ea, 수동 실행) — `build`·`ui-foundation` 모두 성공. UI 테스트 46 passed, python smoke 종료 0, PySide6 onedir 빌드 성공, 빌드된 exe `--smoke`(offscreen) 종료 코드 0. 한계: offscreen 플랫폼이라 실제 Windows 창 플러그인(qwindows) 표시 경로는 실행되지 않음 |
+| 폴더 크기·smoke 시간(CI 러너, 참고용·합격선 없음) | 폴더 91.7 MB, smoke 0.29 s (artifact 압축 파일 약 38.2 MB). 학교 PC·실제 창 표시 시간 **미측정**. PyInstaller 경고 `api-ms-win-*.dll` not found 다수(시스템 DLL 해석 경고, 빌드·smoke는 성공) |
 | **Windows 10/11 실제 창 표시, 맑은 고딕 렌더링, 125/150% DPI 외관, 키보드 탐색 실감** | **미검증**(수동) |
 | 학교 PC Defender·SmartScreen 반응 | **미검증**(수동) |
 | 콤보박스 드롭다운 화살표 모양 | Mac 렌더링에서는 스타일 충돌 가능성이 있어 사용자 지정 스타일을 뺐다. Windows 모양 **미확인** |
-| 최종 EXE 크기 | 측정만 한다(합격선 없음) |
 | 디자인 `code.html` | 전달받지 못함(`screen.png`·`DESIGN.md`만 사용) |
+
+## 5. 정식 배포 전 확인해야 할 라이선스 항목 (미결정, 임의로 정하지 않음)
+출처는 위 Qt FAQ·라이선스 문서. 법률 자문이 아니며, 아래는 **결정이 필요한 항목**이다.
+1. 배포 범위: 같은 기관 내부만인가, 다른 기관·학교 밖에도 전달하는가 (내부 사용에 대한 해석은 미확인 → 법무/Qt 확인).
+2. LGPL 전문 사본과 눈에 띄는 사용 고지를 앱 안(정보 화면)과 배포 폴더(`LICENSES` 등)에 둘 위치·문구.
+3. 사용한 Qt 라이브러리(QtCore/QtGui/QtWidgets 및 동봉 DLL·플러그인) 소스 제공 방식 — 소스 동봉 또는 서면 제안. 링크만으로는 불충분.
+4. 사용자가 다른 Qt 버전으로 교체할 수 있음을 보장하는 방법 — onedir 폴더 구조에서 DLL 교체 가능 여부 실검증과 교체 안내문. (onedir만으로 충족된다고 가정하지 않음)
+5. 동봉되는 Qt 플러그인·번들 라이브러리 각각의 라이선스 목록(실제 빌드 산출물 기준으로 재확인) — GPL 전용 모듈이 섞이지 않았는지 포함.
+6. 상용 라이선스 구매 여부 — 이 문서는 LGPLv3 적용을 전제로 개발을 계속하며, 구매·배포 방식은 사용자 결정 사항이다.
