@@ -45,15 +45,18 @@ def test_status_bar_shows_version_and_network_notice(win):
     assert f"v{scholarship_payment.__version__}" in texts and any("네트워크" in t for t in texts)
 
 
-def test_footer_buttons_follow_navigator(win):
+def test_footer_buttons_follow_navigator(qapp, make_context, ready_settings, make_input):
+    win = MainWindow(available=QSize(1920, 1080), context=make_context(settings=ready_settings))
+    win.show()
     assert not win.back_button.isEnabled() and not win.next_button.isEnabled()
-    win.set_step_ready(Step.FILE, True)
+    win.model.set_source(make_input(n=2))                    # Step 1 준비 상태는 실제 입력이 결정한다(강제로 켜지 않음)
     assert win.next_button.isEnabled()
     win.next_button.click()
     assert win.navigator.current is Step.REVIEW and win.back_button.isEnabled() and not win.next_button.isEnabled()
     assert win.stack.currentIndex() == 1 and win.stepper.state_of(0) == "done" and win.stepper.state_of(1) == "current"
     win.back_button.click()
     assert win.navigator.current is Step.FILE and win.stack.currentIndex() == 0
+    win.close()
 
 
 def test_tab_order_reaches_both_footer_buttons(win):

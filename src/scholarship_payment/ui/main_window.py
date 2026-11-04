@@ -7,12 +7,14 @@ from PySide6.QtCore import QSize, Qt
 from PySide6.QtWidgets import (QFrame, QHBoxLayout, QLabel, QMainWindow, QScrollArea, QStackedWidget, QVBoxLayout, QWidget)
 
 from scholarship_payment import __version__
+from scholarship_payment.ui.context import AppContext
 from scholarship_payment.ui.navigation import STEP_TITLES, Navigator, Step
+from scholarship_payment.ui.state import Step1Model
+from scholarship_payment.ui.step1 import BLOCKING_LABELS, Step1Page
 from scholarship_payment.ui.theme import FOOTER_HEIGHT, SPACING, STEPPER_HEIGHT, fit_window_size
 from scholarship_payment.ui.widgets import AppButton, Card, StepperBar
 
 PLACEHOLDER_NOTES = {
-    Step.FILE: "사업, 원본 파일, 저장 폴더, 기준일을 선택하는 화면입니다(Phase 2).",
     Step.REVIEW: "지급 요약과 검증 결과를 읽기 전용으로 확인하는 화면입니다(Phase 3).",
     Step.RESULT: "변환 결과와 생성된 파일을 보여주는 화면입니다(Phase 4).",
 }
@@ -33,8 +35,9 @@ def _placeholder(step: Step) -> QWidget:
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, available: QSize | None = None) -> None:
+    def __init__(self, available: QSize | None = None, context: AppContext | None = None) -> None:
         super().__init__()
+        self.context = context or AppContext.default()
         self.setWindowTitle(f"장학금 지급명단 변환 v{__version__}")
         if available is None:
             screen = self.screen() or None
@@ -61,9 +64,11 @@ class MainWindow(QMainWindow):
         bl.addWidget(self.stepper)
         col.addWidget(band)
 
+        self.model = Step1Model(self.context.store, self.context.runner, today=self.context.today, default_dirs=self.context.default_dirs)
+        self.step1 = Step1Page(self.model, self.context)
         self.stack = QStackedWidget()
         for s in Step:
-            self.stack.addWidget(_placeholder(s))
+            self.stack.addWidget(self.step1 if s == Step.FILE else _placeholder(s))
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
@@ -77,12 +82,16 @@ class MainWindow(QMainWindow):
         fl.setContentsMargins(SPACING["xl"], SPACING["sm"], SPACING["xl"], SPACING["sm"])
         self.back_button = AppButton("이전", "secondary")
         self.next_button = AppButton("다음", "primary")
+        self.footer_hint = QLabel("")
+        self.footer_hint.setProperty("role", "hint")
         fl.addWidget(self.back_button)
         fl.addStretch(1)
+        fl.addWidget(self.footer_hint)
+        fl.addSpacing(SPACING["md"])
         fl.addWidget(self.next_button)
         col.addWidget(footer)
         self.back_button.clicked.connect(self.navigator.back)
-        self.next_button.clicked.connect(self.navigator.next)
+        self.next_button.clicked.connect(self._on_next)
 
         version = QLabel(f"v{__version__}")
         notice = QLabel("이 프로그램은 네트워크를 사용하지 않습니다")
@@ -90,9 +99,34 @@ class MainWindow(QMainWindow):
         self.statusBar().addPermanentWidget(version)
         self.statusBar().setSizeGripEnabled(False)
 
+        self.setTabOrder(self.step1.replace_button, self.back_button)
         self.setTabOrder(self.back_button, self.next_button)
         self.navigator.on_change(self._sync)
+        self.model.on_change(self._sync_ready)
+        self._sync_ready()
         self._sync()
+
+    def _on_next(self) -> None:
+        if self.navigator.current == Step.FILE:
+            self.model.recheck()                         # 선택 후 파일이 사라졌거나 바뀌었는지 다시 확인하고, 아니면 이동하지 않는다
+            if not self.model.ready():
+                return
+        self.navigator.next()
+
+    def _sync_ready(self) -> None:
+        self.navigator.set_ready(Step.FILE, self.model.ready())
+        self._sync_hint()
+
+    def _sync_hint(self) -> None:
+        """다음 버튼이 막힌 이유(아직 필요한 입력)를 푸터에 보여 준다. 본문이 스크롤되어 상태 줄이 가려져도 알 수 있게 한다."""
+        needed = [BLOCKING_LABELS[f] for f in self.model.blocking()] if self.navigator.current == Step.FILE else []
+        self.footer_hint.setText("필요: " + ", ".join(needed) if needed else "")
+
+    def closeEvent(self, event) -> None:
+        shutdown = getattr(self.context.runner, "shutdown", None)
+        if shutdown:
+            shutdown()
+        super().closeEvent(event)
 
     def set_step_ready(self, step: Step, ready: bool) -> None:
         self.navigator.set_ready(step, ready)
@@ -104,3 +138,5 @@ class MainWindow(QMainWindow):
         self.back_button.setEnabled(nav.can_back())
         self.next_button.setEnabled(nav.can_next())
         self.next_button.setVisible(nav.current < Step.RESULT)
+        self.next_button.setText("다음: 지급내역 확인" if nav.current == Step.FILE else "다음")
+        self._sync_hint()

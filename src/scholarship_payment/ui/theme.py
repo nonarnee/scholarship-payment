@@ -81,6 +81,29 @@ QPushButton[variant="destructive"]:pressed {{ background: {c['error']}; color: {
 QPushButton[variant="destructive"]:focus {{ border: 2px solid {c['error']}; }}
 QPushButton[variant="destructive"]:disabled {{ background: {c['disabled_bg']}; color: {c['text_disabled']}; border: 1px solid {c['border']}; }}
 
+QPushButton[variant="link"] {{ background: transparent; color: {c['primary']}; border: 1px solid transparent; padding: 0 {SPACING['sm']}px; min-height: 24px; {_font('label_md')} }}
+QPushButton[variant="link"]:hover {{ background: {c['info_bg']}; }}
+QPushButton[variant="link"]:focus {{ {focus_ring} }}
+QPushButton[variant="link"]:disabled {{ color: {c['text_disabled']}; }}
+QPushButton[seg="true"] {{ background: transparent; color: {c['text_secondary']}; border: 1px solid transparent; min-height: {h - 4}px; {_font('label_md')} }}
+QPushButton[seg="true"]:hover {{ background: {c['button_hover']}; }}
+QPushButton[seg="true"]:checked {{ background: {c['primary']}; color: {c['on_primary']}; }}
+QPushButton[seg="true"]:focus {{ border: 2px solid {c['text']}; }}
+QFrame#SegTabs {{ background: {c['surface_alt']}; border: 1px solid {c['border']}; border-radius: {r['card']}px; }}
+QFrame#DropZone {{ background: {c['surface_alt']}; border: 1px dashed {c['stroke']}; border-radius: {r['card']}px; }}
+QFrame#DropZone[state="active"] {{ background: {c['drop_active_bg']}; border: 1px solid {c['primary']}; }}
+QFrame#DropZone[state="reject"] {{ background: {c['error_bg']}; border: 1px solid {c['error']}; }}
+QFrame#Panel {{ background: {c['surface_alt']}; border: 1px solid {c['border']}; border-radius: {r['card']}px; }}
+QFrame#Strip {{ background: {c['table_header']}; border: 1px solid {c['border']}; border-radius: {r['card']}px; }}
+QFrame#Notice {{ background: {c['warning_bg']}; border: 1px solid {c['warning']}; border-radius: {r['control']}px; }}
+QFrame#Notice QLabel {{ color: {c['warning']}; }}
+QFrame#FileIcon {{ background: {c['success_bg']}; border-radius: {r['control']}px; }}
+QLineEdit[role="path"] {{ background: {c['card']}; {_font('body_sm')} }}
+QLabel[role="error"] {{ color: {c['error']}; {_font('body_sm')} }}
+QLabel[role="hint"] {{ color: {c['text_secondary']}; {_font('label_sm')} }}
+QLabel[role="icon"] {{ color: {c['success']}; {_font('label_sm')} }}
+QLabel[role="filename"] {{ {_font('headline_sm')} }}
+QDialog {{ background: {c['window']}; }}
 QLineEdit, QComboBox {{ min-height: {h - 2}px; background: {c['card']}; border: 1px solid {c['stroke']}; border-radius: {r['control']}px; padding: 0 {SPACING['sm']}px; {_font('body_md')} }}
 QLineEdit:hover, QComboBox:hover {{ border-color: {c['stroke_hover']}; }}
 QLineEdit:focus, QComboBox:focus {{ {focus_ring} }}

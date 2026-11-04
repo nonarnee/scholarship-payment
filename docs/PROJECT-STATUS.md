@@ -20,6 +20,7 @@
 | EXE / GitHub Actions | 설정 작성됨(`.github/workflows/build-windows.yml`, `packaging/`): Windows 러너에서 안전 검사·테스트·합성 종단 스모크·Tk 확인·PyInstaller 빌드. **러너 실행 결과는 PR의 Actions 기록으로 확인**하며, 만든 exe를 실제로 실행해 본 적은 없음 |
 | 배포·SmartScreen | exe 에 코드 서명 없음(예산 미사용 결정). 빌드를 폴더 방식(onedir)+버전 리소스+SHA256SUMS 로 변경(2026-11-04), 절차는 `docs/DISTRIBUTION.md`. **Windows 에서 경고가 실제로 줄었는지는 미검증** |
 | 신규 화면(PySide6) 기반 — Phase 1 | `feat/ui-foundation` 브랜치(커밋 6f655ea, 푸시됨·main 미병합): `src/scholarship_payment/ui/`(토큰·공통 위젯·네비게이션·메인 창 뼈대·갤러리), 선택 의존성 `[gui]`, 기존 Tkinter 화면·엔진 **무변경**. Mac offscreen 테스트 46개·캡처와 Windows 러너 CI(실행 41770914331: UI 테스트 46 passed, onedir 빌드, exe offscreen smoke 종료 0, 폴더 91.7 MB, smoke 0.29 s)로 확인. **Windows 실행·DPI·Defender 미검증.** 상세·라이선스: `docs/UI-FRAMEWORK.md` |
+| 신규 화면(PySide6) — Phase 2 (Step 1 · 고급 설정) | `feat/ui-step1-settings` 브랜치: `config/user_settings.py`, `ui/`의 상태·검증기·Step 1 화면·고급 설정 대화상자·정책 만들기. 기존 Tkinter·엔진·정책 **무변경**. 자동 테스트 775 passed(기존 631 + 신규 144)와 Mac offscreen 캡처로만 확인. **Windows 실행·DPI·Defender, Phase 2 코드의 Windows CI 실행 미검증.** 미리보기·변환·결과 화면은 미구현. 상세: `docs/UI-FRAMEWORK.md` §6 |
 | 공개 안전 체계 | 구현됨 (검사기, pre-commit 훅, `.gitignore`, 합성 데이터 생성기) |
 | 불변조건 자동 테스트 | DI·FP 대부분이 합성 데이터에서 자동 테스트됨(§4). **실제 템플릿·실자료·Windows Excel·업로드 시스템은 미검증** |
 | Windows Excel 실검증 | **미수행** |
