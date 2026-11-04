@@ -93,6 +93,10 @@ QFrame#SegTabs {{ background: {c['surface_alt']}; border: 1px solid {c['border']
 QFrame#DropZone {{ background: {c['surface_alt']}; border: 1px dashed {c['stroke']}; border-radius: {r['card']}px; }}
 QFrame#DropZone[state="active"] {{ background: {c['drop_active_bg']}; border: 1px solid {c['primary']}; }}
 QFrame#DropZone[state="reject"] {{ background: {c['error_bg']}; border: 1px solid {c['error']}; }}
+QFrame#IssueRow {{ background: {c['card']}; border: 1px solid {c['border']}; border-radius: {r['card']}px; }}
+QFrame#IssueRow[severity="error"] {{ background: {c['error_bg']}; border: 1px solid {c['error']}; }}
+QFrame#IssueRow[severity="warning"] {{ background: {c['warning_bg']}; border: 1px solid {c['warning']}; }}
+QFrame#IssueRow[severity="note"] {{ background: {c['info_bg']}; border: 1px solid {c['stroke']}; }}
 QFrame#Panel {{ background: {c['surface_alt']}; border: 1px solid {c['border']}; border-radius: {r['card']}px; }}
 QFrame#Strip {{ background: {c['table_header']}; border: 1px solid {c['border']}; border-radius: {r['card']}px; }}
 QFrame#Notice {{ background: {c['warning_bg']}; border: 1px solid {c['warning']}; border-radius: {r['control']}px; }}

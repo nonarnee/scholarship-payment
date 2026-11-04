@@ -328,7 +328,7 @@ def test_footer_hint_is_hidden_on_other_steps(ready_win, make_input, chooser):
     chooser.answers["source"].append(str(make_input(n=2)))
     ready_win.step1.pick_button.click()
     ready_win.next_button.click()
-    assert ready_win.footer_hint.text() == ""
+    assert "필요:" not in ready_win.footer_hint.text()                       # Step 1 의 '필요: …' 안내는 Step 2 에 남지 않는다
 
 
 def test_file_icon_says_xlsx(win):

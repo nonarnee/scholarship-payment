@@ -121,7 +121,120 @@ def _one(out_dir: Path, scale: float) -> None:
         w.close()
 
 
+def _step2(out_dir: Path, scale: float) -> None:
+    """Step 2(읽기 전용 미리보기)의 상태별 캡처. 모든 입력은 합성 데이터다."""
+    os.environ["QT_QPA_PLATFORM"] = "offscreen"
+    from msoffcrypto.format.ooxml import OOXMLFile
+    from PySide6.QtCore import QSize
+    from PySide6.QtWidgets import QApplication
+
+    from scholarship_payment.config.policy_builder import make_policy_file
+    from scholarship_payment.config.user_settings import UserSettings
+    from scholarship_payment.ui.context import AppContext
+    from scholarship_payment.ui.main_window import MainWindow
+    from scholarship_payment.ui.runner import InlineRunner, ManualRunner
+    from scholarship_payment.ui.state import SettingsStore
+    from scholarship_payment.ui.theme import apply_theme
+
+    tag = f"{int(scale * 100)}"
+    app = QApplication([])
+    apply_theme(app)
+    mk = _synthetic()
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = Path(tmp)
+        template = tmp / "synthetic_template.xlsx"
+        template.write_bytes((ROOT / "templates" / "synthetic_payment_template.xlsx").read_bytes())
+        values = {"list_title": "합성 {year}년 {month}월 명단", "wins_work_name": "합성근로", "wris_gub_a": "ZZ0001", "wris_gub_b": "ZZ0002", "remit_info": "합성적요({month}월)"}
+        policy = make_policy_file(template, values, tmp / "policy_daechung.json", "daechung")
+        out = tmp / "결과"
+        out.mkdir()
+        settings = UserSettings(last_program="daechung").with_paths("daechung", template_path=str(template), policy_path=str(policy), out_dir=str(out))
+        n = {"i": 0}
+
+        def src(name, rows=5, extra=(), mutate=None):
+            wb = mk.build_input(rows, "numeric", extra)
+            if mutate:
+                mutate(wb.active)
+            p = tmp / name
+            wb.save(p)
+            return p
+
+        class NoPick:
+            def __getattr__(self, name):
+                return lambda *a, **k: None
+
+        def window(runner=None):
+            n["i"] += 1
+            store = SettingsStore(tmp / f"cfg{n['i']}" / "settings.json")
+            store.commit(settings)
+            w = MainWindow(available=QSize(1920, 1080), context=AppContext(store=store, runner=runner or InlineRunner(), chooser=NoPick(), today=lambda: date(2099, 10, 7), default_dirs=[]))
+            w.show()
+            return w
+
+        def go(w, path):
+            w.step1.model.set_source(str(path))
+            if hasattr(w.context.runner, "run_all"):
+                w.context.runner.run_all()
+            w.next_button.click()
+            app.processEvents()
+
+        def save(w, name):
+            app.processEvents()
+            w.grab().save(str(out_dir / f"step2_{name}_{tag}.png"))
+            w.close()
+
+        w = window()
+        go(w, src("ok.xlsx"))
+        save(w, "ready")
+        w = window()
+        go(w, src("carry.xlsx", 4, ((2, 480, "9999년08월"), (3, 90, "9999년08월"))))
+        save(w, "ready_with_notes")
+        w = window()
+        go(w, src("dup.xlsx", 5, mutate=lambda ws: ws.__setitem__("F7", ws["F5"].value)))
+        save(w, "blocking_error")
+        w = window()
+        go(w, src("bank.xlsx", 3, mutate=lambda ws: [ws.__setitem__(f"T{r}", "표에없는가상은행") for r in (3, 4)]))
+        save(w, "bank_missing")
+        enc = tmp / "enc.xlsx"
+        with open(src("plain.xlsx", 3), "rb") as f, open(enc, "wb") as o:
+            OOXMLFile(f).encrypt("가짜-pw", o)
+        w = window()
+        go(w, enc)
+        save(w, "password")
+        w = window()
+        go(w, enc)
+        w.step2.password_edit.setText("틀림")
+        w.step2.password_ok.click()
+        save(w, "password_wrong_once")
+        w = window()
+        go(w, enc)
+        for i in range(3):
+            w.step2.password_edit.setText(f"틀림{i}")
+            w.step2.password_ok.click()
+        save(w, "password_locked")
+        r = ManualRunner()
+        w = window(r)
+        r.run_all()
+        go(w, src("load.xlsx"))
+        save(w, "loading")
+        w = window()
+        file = src("changed.xlsx")
+        go(w, file)
+        data = bytearray(file.read_bytes())
+        data[-1] ^= 1
+        file.write_bytes(bytes(data))
+        w.step2.refresh_freshness()
+        save(w, "invalidated")
+        w = window()
+        w.resize(910, 512)
+        go(w, src("small.xlsx", 4, ((2, 480, "9999년08월"),)))
+        save(w, "small_screen")
+
+
 def main(argv: list[str]) -> int:
+    if len(argv) >= 4 and argv[1] == "--step2":
+        _step2(Path(argv[2]), float(argv[3]))
+        return 0
     if len(argv) >= 4 and argv[1] == "--one":
         _one(Path(argv[2]), float(argv[3]))
         return 0
@@ -130,6 +243,7 @@ def main(argv: list[str]) -> int:
     for scale in SCALES:
         env = {**os.environ, "QT_SCALE_FACTOR": str(scale), "QT_QPA_PLATFORM": "offscreen"}
         subprocess.run([sys.executable, __file__, "--one", str(out), str(scale)], env=env, check=True)
+        subprocess.run([sys.executable, __file__, "--step2", str(out), str(scale)], env=env, check=True)
     print("saved:", ", ".join(sorted(p.name for p in out.glob("*.png"))))
     return 0
 
