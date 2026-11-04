@@ -11,7 +11,7 @@
 - 근무형태 앞의 활동월(`04월 …`)이 지급월과 다르면 이월로 보고 경고(`CARRYOVER_ROW`)만 낸다. 활동월이 지급월보다 늦은 경우는
   지급월이 1·2월(학년도 경계)일 때만 허용하고 그 밖에는 차단한다. 년월 열은 모든 행이 같아야 한다.
 - 사업자등록번호는 원본에 없어 빈 값이다. 멘티 인원은 맨 위 행 기준 1명이다.
-- 년월(`YYYY-MM`)은 학생의 행이 둘 이상이면 첫 행에만 있다(둘째 행부터 빈 칸은 첫 행 값을 쓴다). 값이 있으면 모든 행이 같아야 한다.
+- 년월(`YYYY-MM`)·성명·학번·학과는 학생의 행이 둘 이상이면 첫 행에만 있다(둘째 행부터 빈 칸은 첫 행 값을 쓴다). 값이 있으면 학번·성명은 첫 행과 같아야 하고 년월은 모든 행이 같아야 한다.
 - 원본은 읽기만 한다.
 """
 from __future__ import annotations
@@ -100,7 +100,7 @@ class MulticulturalAdapter:
         for r in range(FIRST_DATA_ROW, total_row):
             seq = ws.cell(r, 2).value
             if isinstance(seq, int) and not isinstance(seq, bool):
-                rec = self._parse_data_row(ws, r, errors, yms, group[0].get("ym") if group else None)
+                rec = self._parse_data_row(ws, r, errors, yms, group[0] if group else None)
                 if rec is not None:
                     group.append(rec)
                 else:
@@ -136,7 +136,7 @@ class MulticulturalAdapter:
         warnings.sort(key=lambda w: (w.row or 0, w.code))
         return AdapterResult(batch=batch, source_totals=totals, warnings=tuple(warnings))
 
-    def _parse_data_row(self, ws, r, errors, yms, top_ym=None) -> dict | None:
+    def _parse_data_row(self, ws, r, errors, yms, top=None) -> dict | None:
         failed = False
 
         def attempt(fn, *a, **kw):
@@ -149,12 +149,17 @@ class MulticulturalAdapter:
                 return None
 
         g = lambda col: ws[f"{col}{r}"].value                                      # noqa: E731
-        student_id = attempt(normalize_identifier, g("F"), "student_id", expected_len=self.student_id_len)
+        # 한 학생의 행이 둘 이상이면 년월·성명·학번·학과는 첫 행에만 나온다(원본 특성). 둘째 행부터 비어 있으면 첫 행의 값을 쓴다.
+        # 첫 행이 이미 오류(top["bad"])면 그 오류만 보고하고 여기서는 추가 오류를 만들지 않는다.
+        inherit = lambda col, key: top is not None and _blank(g(col)) and key        # noqa: E731
+        if inherit("F", "student_id"):
+            student_id = top.get("student_id")
+        else:
+            student_id = attempt(normalize_identifier, g("F"), "student_id", expected_len=self.student_id_len)
         account = attempt(normalize_account, g("P"))
         minutes = attempt(parse_hours, g("M"))
         amount = attempt(parse_amount, g("N"), "pay_amount")
-        # 한 학생의 행이 둘 이상이면 년월은 첫 행에만 나온다(원본 특성). 둘째 행부터 비어 있으면 첫 행의 값을 쓴다.
-        ym = top_ym if (top_ym is not None and _blank(g("D"))) else attempt(_parse_ym, g("D"))
+        ym = top.get("ym") if inherit("D", "ym") else attempt(_parse_ym, g("D"))
         work = _text(g("H"))
         m = _PAREN.search(work) if isinstance(work, str) else None
         rate = self.rates.get(m.group(1).strip()) if m else None
@@ -176,7 +181,9 @@ class MulticulturalAdapter:
         if failed:
             return None
         yms.add(ym)
-        return {"ym": ym, "carry": carry, "row": r, "student_id": student_id, "name": _text(g("E")), "dept": _text(g("G")), "org": _text(g("I")),
+        return {"ym": ym, "carry": carry, "row": r, "student_id": student_id,
+                "name": top.get("name") if inherit("E", "name") else _text(g("E")),
+                "dept": top.get("dept") if inherit("G", "dept") else _text(g("G")), "org": _text(g("I")),
                 "bank": _text(g("O")), "account": account, "minutes": minutes, "amount": amount, "rate": rate}
 
     def _close_group(self, ws, r, group, errors, warnings) -> PaymentRow | None:
