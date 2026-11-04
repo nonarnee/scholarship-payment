@@ -232,8 +232,20 @@ def build_template(n=45):
 
 
 # ---------------------------------------------------------------- 입력 형식
-def build_input(n, id_mode):
-    rows = records(n, id_mode)
+def with_carryover(rows, extra):
+    """`extra` = [(대상자 번호(1부터), 분, 년월)]: 해당 대상자 바로 아래에 같은 사람의 이월 행을 끼워 넣고 순번을 다시 매긴다."""
+    out = []
+    for d in rows:
+        out.append(d)
+        for who, minutes, ym in extra:
+            if who == d["seq"]:
+                out.append({**d, "ym": ym, "minutes": minutes, "text": fmt_min(minutes), "pay": d["rate"] * minutes // 60})
+    return [{**d, "seq": k} for k, d in enumerate(out, 1)]
+
+
+def build_input(n, id_mode, extra=()):
+    rows = with_carryover(records(n, id_mode), extra)
+    n = len(rows)
     wb = Workbook()
     ws = wb.active
     ws.title = "월별지급승인"

@@ -39,7 +39,7 @@ def test_end_to_end_one_row_per_student_and_column_f_hidden(make_mc_input, synth
     assert ws["L7"].value == 1500 * 5 + 1000 * 6
     wins, wris = load_workbook(res.output_path)["WINS"], load_workbook(res.output_path)["WRIS"]
     assert wins.max_row == 5 and wris.max_row == 5                                        # 학생당 1행
-    assert sorted(w.code for w in res.warnings) == ["RATE_MIXED_IN_GROUP", "STUDENT_MERGED_ROWS"]
+    assert res.warnings == () and sorted(n.code for n in res.notes) == ["RATE_MIXED_IN_GROUP", "STUDENT_MERGED_ROWS"]
 
 
 def test_policy_file_roundtrip_with_optional_keys(tmp_path):

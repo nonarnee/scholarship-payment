@@ -15,7 +15,7 @@ from scholarship_payment.config.policy_builder import HIDDEN_FOR, PROMPTS, RATES
 from scholarship_payment.errors import ValidationFailed
 
 MAX_PASSWORD_TRIES = 3
-PROGRAMS = {"대청교": "daechung", "다문화·탈북학생 멘토링": "multicultural"}     # AI멘토링은 샘플 확보 전
+PROGRAMS = {"대청교": "daechung", "다문화·탈북학생 멘토링": "multicultural", "AI멘토링": "ai"}
 
 
 def open_folder(path: Path) -> None:

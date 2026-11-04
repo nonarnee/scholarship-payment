@@ -22,6 +22,7 @@ class AdapterResult:
     batch: PaymentBatch
     source_totals: SourceTotals
     warnings: tuple[ValidationError, ...] = ()     # 차단하지 않는 경고(코드·필드·행 번호만)
+    notes: tuple[ValidationError, ...] = ()        # 참고(정상 처리된 사실 안내: 이월 행 합산 등)
 
 
 class InputValidationFailed(Exception):

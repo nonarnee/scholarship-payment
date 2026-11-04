@@ -230,10 +230,92 @@ def test_duplicate_ids_and_zero_amounts_are_not_judged_here(make_input):
     # 중복 학번·0원 처리는 업무 규칙(OPEN H5)이라 Adapter 가 판단하지 않는다. 합계행은 맞춰 둔다.
     def mutate(ws):
         paid = ws["O7"].value
-        ws["F6"] = ws["F5"].value       # 중복 학번
+        ws["F7"] = ws["F5"].value       # 중복 학번(연속하지 않은 행: 연속 행은 이월로 합산한다)
         ws["O7"] = 0                    # 0원
         ws["O48"] = ws["O48"].value - paid
     rows = read(make_input(mutate=mutate)).batch.rows
     assert len(rows) == 45
-    assert rows[3].student_id == rows[2].student_id          # 행 6 == 행 5
+    assert rows[4].student_id == rows[2].student_id          # 행 7 == 행 5
     assert rows[4].pay_amount == 0                           # 행 7
+
+
+# ---- 이월 2행 학생(대청교·AI멘토링 공통, M29·M30) ------------------------------------------------
+PREV = "9999년08월"
+CARRY = ((2, 8 * 60, PREV), (3, 90, PREV))          # 2·3번째 대상자 아래에 이월 행
+
+
+def test_carryover_rows_are_merged_into_one_student_row_using_the_top_row(make_input):
+    res = read(make_input(n=4, extra=CARRY))
+    assert len(res.batch.rows) == 4 and (res.batch.year, res.batch.month) == (9999, 9)
+    base = DaechungAdapter().read(make_input(n=4)).batch.rows
+    for k, add in ((1, 8 * 60), (2, 90)):
+        got = res.batch.rows[k]
+        assert got.minutes == base[k].minutes + add and got.pay_amount == base[k].pay_amount + add * 1000 // 60
+        assert got.source_row == (4, 6)[k - 1] and got.student_id == base[k].student_id    # 맨 위 행 기준
+        assert got.headcount == base[k].headcount
+    assert res.batch.rows[0] == base[0] and res.batch.rows[3].minutes == base[3].minutes
+
+
+def test_carryover_is_a_note_not_a_warning(make_input):
+    res = read(make_input(n=4, extra=CARRY))
+    assert [w.code for w in res.warnings] == []
+    assert {(n.code, n.row) for n in res.notes} == {("CARRYOVER_ROW", 5), ("STUDENT_MERGED_ROWS", 4),
+                                                    ("CARRYOVER_ROW", 7), ("STUDENT_MERGED_ROWS", 6)}
+
+
+def test_carryover_row_with_a_later_month_than_the_top_row_is_blocked(make_input):
+    exc = errors_of(make_input(n=3, extra=((2, 60, "9999년10월"),)))
+    assert ("CARRYOVER_MONTH_INVALID", "year_month", 5) in triples(exc)
+
+
+def test_different_months_between_students_are_still_blocked(make_input):
+    assert "MONTH_MIXED" in codes(errors_of(make_input(n=3, mutate=lambda ws: ws.__setitem__("D4", PREV))))
+
+
+@pytest.mark.parametrize("col,value,code", [("E", "다른사람", "GROUP_STUDENT_MISMATCH"), ("U", "999-999-1", "GROUP_ACCOUNT_MISMATCH"),
+                                            ("T", "다른은행", "GROUP_ACCOUNT_MISMATCH")])
+def test_rows_of_one_student_must_have_the_same_person_and_account(make_input, col, value, code):
+    exc = errors_of(make_input(n=3, extra=((2, 60, PREV),), mutate=lambda ws: ws.__setitem__(f"{col}5", value)))
+    assert (code, 5) in {(e.code, e.row) for e in exc.errors}
+
+
+def test_non_adjacent_duplicate_student_is_not_merged(make_input):
+    def mut(ws):
+        for c in "EFGHIJTU":
+            ws[f"{c}5"] = ws[f"{c}3"].value
+    res = read(make_input(n=3, mutate=mut))
+    assert len(res.batch.rows) == 3 and res.batch.rows[0].student_id == res.batch.rows[2].student_id    # Validator 가 중복으로 차단한다
+
+
+def test_merged_totals_still_match_the_source_total_row(make_input):
+    assert read(make_input(n=4, extra=CARRY)).source_totals.amount == sum(r.pay_amount for r in read(make_input(n=4, extra=CARRY)).batch.rows)
+
+
+# ---- AI멘토링: 시급 고정 -------------------------------------------------------------------------
+def ai():
+    return DaechungAdapter(program_code="AI", fixed_rate=1000)
+
+
+def test_ai_uses_its_own_program_code_and_accepts_the_fixed_rate(make_input):
+    assert ai().read(make_input(n=3, extra=CARRY[:1])).batch.program_code == "AI"
+
+
+def test_ai_blocks_a_row_whose_rate_is_not_the_fixed_rate(make_input):
+    with pytest.raises(InputValidationFailed) as ei:
+        ai().read(make_input(n=3, mutate=lambda ws: ws.__setitem__("L4", 2000)))
+    assert ("RATE_NOT_FIXED", 4) in {(e.code, e.row) for e in ei.value.errors}
+
+
+def test_ai_blocks_when_amount_differs_from_rate_times_total_hours(make_input):
+    def mut(ws):
+        for c in "NOP":
+            ws[f"{c}4"] = ws[f"{c}4"].value + 1
+        for c in "NOP":
+            ws[f"{c}6"] = ws[f"{c}6"].value + 1           # 합계행도 맞춰 합계 불일치와 구분
+    with pytest.raises(InputValidationFailed) as ei:
+        ai().read(make_input(n=3, mutate=mut))
+    assert "AMOUNT_RATE_MISMATCH" in {e.code for e in ei.value.errors}
+
+
+def test_daechung_does_not_apply_the_ai_rate_rule(make_input):
+    assert DaechungAdapter().read(make_input(n=3, mutate=lambda ws: ws.__setitem__("L4", 2000))).batch.rows

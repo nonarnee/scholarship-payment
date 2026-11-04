@@ -65,4 +65,4 @@ def run_conversion(program: str, input_path, out_dir, template_path, policy_path
         if e.missing_banks:
             extra += ("은행코드 표(템플릿의 '은행코드' 시트)에 WINS·WRIS 코드를 채워야 하는 은행: " + ", ".join(e.missing_banks),)
         return Outcome(False, e.stage, "변환 실패: 파일을 만들지 않았습니다.", extra + _lines(e.errors))
-    return Outcome(True, "ok", f"완료: 대상자 {r.count}명, 출력 재검증 통과", tuple(f"경고: {w}" for w in r.warnings), r.output_path, r.count)
+    return Outcome(True, "ok", f"완료: 대상자 {r.count}명, 출력 재검증 통과", tuple(f"경고: {w}" for w in r.warnings) + tuple(f"참고: {n}" for n in r.notes), r.output_path, r.count)

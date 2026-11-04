@@ -42,8 +42,8 @@ def test_multiple_orgs_are_merged_using_the_top_row(make_mc_input, synthetic):
     assert r.org_name == "가상기관최근" and r.work_place == "가상기관최근"           # 위의 행 = 최근 활동기관
     assert r.minutes == 11 * 60 + 30 and r.pay_amount == 1500 * 5 + 1000 * 6 + 500   # 합계
     assert r.hourly_rate == 1500 and r.source_row == 5                              # 맨 위 행의 시급, 맨 위 행 번호
-    assert ("STUDENT_MERGED_ROWS", 5) in [(w.code, w.row) for w in res.warnings]
-    assert "RATE_MIXED_IN_GROUP" in [w.code for w in res.warnings]
+    assert ("STUDENT_MERGED_ROWS", 5) in [(n.code, n.row) for n in res.notes]
+    assert "RATE_MIXED_IN_GROUP" in [n.code for n in res.notes] and res.warnings == ()
 
 
 def test_unknown_work_type_is_blocked(make_mc_input):
@@ -142,8 +142,8 @@ def _set_work(ws, coord, text):
 def test_carryover_activity_month_is_a_warning_not_an_error(make_mc_input):
     # 4월 활동분이 9월에 지급되는 이월 행: 근무형태 앞 월이 지급월과 다르다
     res = read(make_mc_input(n=2, mutate=lambda ws: _set_work(ws, "H3", "04월 방문(가상A)")))
-    assert ("CARRYOVER_ROW", 3) in [(w.code, w.row) for w in res.warnings]
-    assert read(make_mc_input(n=2)).warnings == ()
+    assert ("CARRYOVER_ROW", 3) in [(n.code, n.row) for n in res.notes] and res.warnings == ()
+    assert read(make_mc_input(n=2)).notes == ()
 
 
 def test_activity_month_after_payment_month_is_blocked_except_at_school_year_boundary(make_mc_input):
@@ -154,7 +154,7 @@ def test_activity_month_after_payment_month_is_blocked_except_at_school_year_bou
         ws["D3"] = "9999-01"
         ws["H3"] = "11월 방문(가상A)"
     res = read(make_mc_input(n=1, mutate=jan))
-    assert (res.batch.year, res.batch.month) == (9999, 1) and [w.code for w in res.warnings] == ["CARRYOVER_ROW"]
+    assert (res.batch.year, res.batch.month) == (9999, 1) and [n.code for n in res.notes] == ["CARRYOVER_ROW"] and res.warnings == ()
 
 
 def test_work_type_without_a_month_prefix_is_still_accepted_for_the_rate(make_mc_input):

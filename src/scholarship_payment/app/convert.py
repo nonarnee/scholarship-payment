@@ -20,8 +20,11 @@ from scholarship_payment.validation.validator import validate
 from scholarship_payment.writers.output_check import verify_output
 from scholarship_payment.writers.template_writer import build_workbook
 
+AI_HOURLY_RATE = 18000        # AI멘토링 시급 고정(사용자 결정 2026-11-04)
+
 ADAPTERS = {
     "daechung": lambda policy: DaechungAdapter(),
+    "ai": lambda policy: DaechungAdapter(program_code="AI", fixed_rate=AI_HOURLY_RATE),
     "multicultural": lambda policy: MulticulturalAdapter(policy.rates()),
 }
 
@@ -41,6 +44,7 @@ class ConvertResult:
     output_path: Path
     count: int
     warnings: tuple[ValidationError, ...]
+    notes: tuple[ValidationError, ...] = ()
 
 
 def convert(program: str, input_path, out_dir, template_path, policy: OutputPolicy = SYNTHETIC_POLICY,
@@ -80,4 +84,4 @@ def convert(program: str, input_path, out_dir, template_path, policy: OutputPoli
         path = save_new(wb, out_dir, filename, lambda tmp: verify_output(tmp, validated, adapted.source_totals))
     except ValidationFailed as e:
         raise ConversionFailed(e.errors, "output") from None
-    return ConvertResult(output_path=path, count=len(validated.rows), warnings=tuple(warnings))
+    return ConvertResult(output_path=path, count=len(validated.rows), warnings=tuple(warnings), notes=adapted.notes)
