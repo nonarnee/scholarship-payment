@@ -11,23 +11,8 @@ from PySide6.QtWidgets import QApplication
 from scholarship_payment.ui.gallery import build_gallery
 from scholarship_payment.ui.main_window import MainWindow
 from scholarship_payment.ui.navigation import Step
+from scholarship_payment.ui.safety import install_safe_excepthook  # noqa: F401  (기존 이름 유지)
 from scholarship_payment.ui.theme import apply_theme
-
-
-def install_safe_excepthook() -> None:
-    """처리되지 않은 예외는 종류만 출력한다. 예외 문구·추적 정보에는 파일 이름·경로가 들어갈 수 있다.
-    개발 중 자세한 정보가 필요하면 환경변수 SCHOLARSHIP_UI_DEBUG=1 을 설정한다."""
-    import os
-
-    original = sys.excepthook
-
-    def hook(exc_type, exc, tb):
-        if os.environ.get("SCHOLARSHIP_UI_DEBUG") == "1":
-            original(exc_type, exc, tb)
-        else:
-            print(f"예기치 않은 오류가 발생했습니다: {exc_type.__name__}", file=sys.stderr)
-
-    sys.excepthook = hook
 
 
 def main(argv: list[str] | None = None) -> int:
