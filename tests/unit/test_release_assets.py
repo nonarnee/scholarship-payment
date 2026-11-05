@@ -317,6 +317,19 @@ def test_engine_module_selection_covers_the_conversion_pipeline_but_not_the_scre
     assert not [n for n in chosen if n.startswith(("scholarship_payment.ui", "scholarship_payment.gui", "openpyxl")) or n.endswith(("controller", "workflow", "user_settings"))]
 
 
+def test_screen_only_policy_edit_is_excluded_but_shared_policy_modules_are_still_compared():
+    """정책 파일 수정은 Qt 화면에만 있다(legacy Tk 에는 없음). 그 한 모듈만 제외하고, 두 화면이 함께 쓰는 정책 생성·검증 모듈은 계속 비교한다."""
+    names = ["scholarship_payment.config.policy_edit", "scholarship_payment.config.policy_builder", "scholarship_payment.config.policy_file",
+             "scholarship_payment.config.policy", "scholarship_payment.config.user_settings", "scholarship_payment.config.default_paths"]
+    chosen = parity.engine_modules(names)
+    assert "scholarship_payment.config.policy_edit" not in chosen and "scholarship_payment.config.user_settings" not in chosen
+    assert {"scholarship_payment.config.policy_builder", "scholarship_payment.config.policy_file", "scholarship_payment.config.policy"} <= set(chosen)
+    qt = {n: "h" for n in chosen}
+    assert parity.compare(qt, dict(qt)) == []                                  # legacy 에 policy_edit 가 없어도 통과
+    assert parity.compare({**qt, "scholarship_payment.config.policy_builder": "다름"}, qt) == ["내용이 다르다: scholarship_payment.config.policy_builder"]
+    assert parity.compare(qt, {k: v for k, v in qt.items() if not k.endswith("policy_file")}) == ["legacy 에 없다: scholarship_payment.config.policy_file"]
+
+
 def test_comparison_reports_identical_missing_and_different_engine_modules():
     a = {"scholarship_payment.app.convert": "d1", "scholarship_payment.adapters.daechung": "d2", "scholarship_payment.errors": "d3"}
     assert parity.compare(a, dict(a)) == []

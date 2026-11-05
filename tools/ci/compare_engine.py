@@ -13,8 +13,9 @@ from pathlib import Path
 
 ENGINE_PREFIXES = ("scholarship_payment.adapters", "scholarship_payment.validation", "scholarship_payment.writers", "scholarship_payment.io",
                    "scholarship_payment.core", "scholarship_payment.models", "scholarship_payment.config", "scholarship_payment.errors", "scholarship_payment.app.convert")
-# 변환 엔진이 아닌 화면 지원 모듈(신규 화면의 사용자 설정 저장소). Tk 화면은 쓰지 않는다.
-EXCLUDED = ("scholarship_payment.config.user_settings",)
+# 변환 엔진이 아닌 화면 지원 모듈. Tk 화면은 쓰지 않는다: 신규 화면의 사용자 설정 저장소, 신규 화면의 정책 파일 수정(백업·충돌 확인·원자 교체).
+# 정책 수정은 변환 파이프라인에 관여하지 않으며 legacy Tk 화면에는 이 기능이 없다. 정책 생성·검증(config.policy_builder·policy_file)은 두 화면이 함께 쓰므로 계속 비교한다.
+EXCLUDED = ("scholarship_payment.config.user_settings", "scholarship_payment.config.policy_edit")
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 
