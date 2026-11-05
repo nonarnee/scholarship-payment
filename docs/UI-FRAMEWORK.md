@@ -121,3 +121,9 @@
 
 **확인하지 않는 것(미검증으로 유지)**: 실제 창 표시·글꼴·DPI, 파일 선택 대화상자, 드래그 앤 드롭, 실제 폴더 열기·클립보드, OS 수준 입력, 학교 PC Defender·SmartScreen, 네트워크 드라이브·OneDrive, 실제 재단 원본·정책·템플릿, 실제 Windows Excel 에서 출력 파일 열기와 인쇄·업로드 호환성. 이 모드의 통과는 **패키징·생성 경로의 자동 확인**일 뿐 배포 검증 완료가 아니다.
 
+## 10. Phase 5-A — 정식 진입점과 배포 후보 빌드 (2026-11-04, 검토 대기)
+**결정(사용자)**: PySide6 를 신규 기본 GUI 로 전환 / Tk 는 한 릴리스 병행(코드·회귀 테스트 유지) / 후보 버전 `0.3.0-rc.1` / onedir 유지 / 개발용 `--gallery`·`--synthetic-e2e-smoke` 는 사용자용 exe 에서 노출하지 않음(`--smoke` 는 유지) / 정보 화면에 버전·라이선스 안내 / 저장소 LICENSE 는 별도 결정 전 추가하지 않음 / 이전 임시 파일 자동 삭제 미구현.
+**구현**: `ui/app_main.py`(정식 진입점: `--smoke`·`--version` 만, 개발 옵션은 종료 코드 2·아무것도 실행하지 않음, 개발 모듈·tkinter 를 import 하지 않음), `packaging/run_gui_qt.py`, `ui/about.py`(정보 화면: 실제 로드된 버전과 메타데이터의 라이선스 표기, 준수 완료 주장 없음, LICENSES 폴더 열기), `ui/runtime_check.py`(`--smoke` 가 필요한 모듈 누락을 실패로 처리), `packaging/build_release.py`·`release_info.py`·`make_release_notices.py`·`dist_assets/`, `tools/ci/inventory_dist.py`·`compare_engine.py`, `packaging/rc-constraints.txt`, 워크플로 개편.
+**로컬 PyInstaller 예비 빌드(macOS)에서 발견해 고친 결함**: 패키징된 exe 의 버전·라이선스가 "확인 불가"(메타데이터 미포함 → `--copy-metadata`), 산출물 점검 도구의 실행 파일·macOS 플러그인 경로 인식, 고지문 생성기가 일부 패키지의 라이선스 파일을 놓침.
+**한계**: 위 빌드는 macOS 이므로 Windows 산출물(Qt 라이브러리·플러그인 목록, 고지문의 Python 전문 포함, exe 실행)의 근거가 아니다. Windows 러너 실행은 아직 하지 않았다. 정식 exe 자체로 생성 경로를 실행하는 E2E 는 없다(개발용 exe 로 실행하고, 두 exe 의 엔진 모듈 바이트코드 동일성·개발 모듈 부재를 점검으로 보완).
+

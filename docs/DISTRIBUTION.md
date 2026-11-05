@@ -14,6 +14,7 @@ Actions가 만드는 앱은 **코드 서명이 없다**(인증서 비용을 쓰�
 - 개인정보는 PC 안에서만 처리하고 외부로 보내지 않음
 
 ## 빌드 산출물 (이 저장소)
+> 배포 후보(`0.3.0-rc.1`)의 산출물 구성·이름·판정 기준은 `docs/RELEASE-RC1.md`, 라이선스 점검은 `docs/LICENSE-REVIEW.md`, 학교 PC 검증은 `docs/UAT-CHECKLIST.md` 를 본다. 신규 PySide6 화면이 기본이고 기존 Tkinter 화면(legacy)은 한 릴리스 병행한다.
 - 폴더 방식(onedir): 압축 해제용 임시 폴더를 쓰는 단일 exe 방식보다 백신 오탐이 적은 편이다.
 - exe 파일 속성에 제품명·설명·버전이 들어간다(`packaging/make_version_info.py`, 버전은 `__version__` 하나만 사용).
 - 화면의 기본 정책·템플릿 자동 채움은 **exe 가 있는 폴더**를 먼저 찾는다(`config/default_paths.py`). 폴더 방식에서도 같은 위치다.
@@ -24,4 +25,4 @@ Actions가 만드는 앱은 **코드 서명이 없다**(인증서 비용을 쓰�
 - 개인 명의 Microsoft 서명 서비스는 한국에서 쓸 수 없고, SignPath 무료는 OSI 오픈소스 라이선스가 필요해 현재 제외.
 
 ## 검증 상태
-Windows 에서 실행 확인 **전**. 확인할 것: ① 브라우저 다운로드본 vs 공유 폴더 복사본의 SmartScreen 표시 ② 폴더 방식 실행·화면 제목 버전·기본 정책/템플릿 자동 채움 ③ 학교 PC Defender 오탐.
+Windows 에서 실행 확인 **전**(배포 후보 빌드의 Windows CI 실행도 아직 하지 않았다). 확인할 것: ① 브라우저 다운로드본 vs 공유 폴더 복사본의 SmartScreen 표시 ② 폴더 방식 실행·화면 제목 버전·기본 정책/템플릿 자동 채움 ③ 학교 PC Defender 오탐.

@@ -1,7 +1,7 @@
 # 프로젝트 현황
 
 > 이 문서는 **실제로 실행한 결과**만 기록한다. 추정·희망 사항은 쓰지 않는다. 변경할 때마다 갱신한다(`WORKFLOW.md` §5).
-> 마지막 갱신: 2026-11-04 / `main` = PR #16(다문화 Adapter) 머지 기준
+> 마지막 갱신: 2026-11-05 / `main` = PR #23(Phase 4) 머지 기준. `feat/release-rc1`(Phase 5-A)은 미커밋 상태이며 이 표의 해당 행이 그 상태를 설명한다.
 
 ## 1. 한눈에 보기
 | 항목 | 상태 |
@@ -22,7 +22,8 @@
 | 신규 화면(PySide6) 기반 — Phase 1 | `feat/ui-foundation` 브랜치(커밋 6f655ea, 푸시됨·main 미병합): `src/scholarship_payment/ui/`(토큰·공통 위젯·네비게이션·메인 창 뼈대·갤러리), 선택 의존성 `[gui]`, 기존 Tkinter 화면·엔진 **무변경**. Mac offscreen 테스트 46개·캡처와 Windows 러너 CI(실행 41770914331: UI 테스트 46 passed, onedir 빌드, exe offscreen smoke 종료 0, 폴더 91.7 MB, smoke 0.29 s)로 확인. **Windows 실행·DPI·Defender 미검증.** 상세·라이선스: `docs/UI-FRAMEWORK.md` |
 | 신규 화면(PySide6) — Phase 2 (Step 1 · 고급 설정) | `feat/ui-step1-settings` 브랜치: `config/user_settings.py`, `ui/`의 상태·검증기·Step 1 화면·고급 설정 대화상자·정책 만들기. 기존 Tkinter·엔진·정책 **무변경**. 자동 테스트 775 passed(기존 631 + 신규 144)와 Mac offscreen 캡처로만 확인. **Windows 실행·DPI·Defender, Phase 2 코드의 Windows CI 실행 미검증.** 미리보기·변환·결과 화면은 미구현. 상세: `docs/UI-FRAMEWORK.md` §6 |
 | 신규 화면(PySide6) — Phase 3 (`prepare()`/`finish()` 분리 + Step 2 읽기 전용 미리보기) | `feat/ui-step2-preview` 브랜치: 변환 쪽은 `app/convert.py`(기존 계약 유지, SHA-256 변경 감지)와 `app/controller.py`(신규 `changed` 단계 안내 한 분기)만 변경, `app/workflow.py`, `ui/preview.py`, `ui/step2.py`, `ui/issue_text.py`. Adapter·Validator·Writer·정책·Tk·CLI **무변경**. 골든 동등성 4종과 자동 테스트 920 passed(합성 데이터), macOS offscreen 캡처로만 확인. **Windows 실행·DPI·CI, 실제 원본·정책으로의 미리보기 미검증.** 지급명단 생성 버튼·결과 화면은 Phase 4. 상세: `docs/UI-FRAMEWORK.md` §7 |
-| 신규 화면(PySide6) — Phase 4 (지급명단 생성 + Step 3 결과 화면) | `feat/ui-step3-generation` 브랜치(미커밋·검토 대기): `app/workflow.py`(`run_finish`), `ui/generation.py`, `ui/step3.py`, 이동 잠금·창 닫기 차단, 전용 생성 워커. 변환 엔진(Adapter·Validator·Writer·`safe_save`·`convert.py`)·정책·Tk·CLI **무변경**. 합성 데이터 자동 테스트 전체 통과, UI 생성 결과가 골든과 동일, macOS offscreen 캡처로만 확인. **Windows 실행·DPI·CI, 실제 재단 원본·정책·학교 PC 저장 동작, 강제 종료 시 임시 파일 정리 미검증(보장하지 않음).** 상세: `docs/UI-FRAMEWORK.md` §8. 패키징된 exe 의 합성 E2E 스모크(`--synthetic-e2e-smoke`)로 생성 경로를 CI 에서 확인(범위·한계는 §9) |
+| 신규 화면(PySide6) — Phase 4 (지급명단 생성 + Step 3 결과 화면) | **main 병합됨(PR #23)**: `app/workflow.py`(`run_finish`), `ui/generation.py`, `ui/step3.py`, 이동 잠금·창 닫기 차단, 전용 생성 워커. 변환 엔진(Adapter·Validator·Writer·`safe_save`·`convert.py`)·정책·Tk·CLI **무변경**. 합성 데이터 자동 테스트·Windows CI 통과, UI 생성 결과가 골든과 동일, 패키징된 개발용 exe 의 합성 E2E 통과. 기능 구현과 자동 검증까지만이며 최종 완료가 아니다. **Windows 실행·DPI·CI, 실제 재단 원본·정책·학교 PC 저장 동작, 강제 종료 시 임시 파일 정리 미검증(보장하지 않음).** 상세: `docs/UI-FRAMEWORK.md` §8. 패키징된 exe 의 합성 E2E 스모크(`--synthetic-e2e-smoke`)로 생성 경로를 CI 에서 확인(범위·한계는 §9) |
+| 배포 후보 준비 — Phase 5-A (`0.3.0-rc.1`) | `feat/release-rc1` 브랜치(미커밋·검토 대기): 정식 PySide6 진입점(`packaging/run_gui_qt.py`, 개발 옵션 거부), 정보 화면, 빌드 스크립트·산출물 점검·엔진 동일성 비교·고지문 생성, 설치 안내·LICENSES, 버전 고정, 워크플로 개편(Qt 기본 + legacy 병행 + 개발용 E2E). 변환 엔진·정책·Tk·CLI **무변경**. 합성 데이터 자동 테스트와 macOS 로컬 PyInstaller 예비 빌드로만 확인했고 **Windows CI 실행 전**. 정식 배포·Phase 5-B(학교 PC UAT)는 **미수행**. 상세: `docs/RELEASE-RC1.md`, `docs/LICENSE-REVIEW.md`, `docs/UAT-CHECKLIST.md` |
 | 공개 안전 체계 | 구현됨 (검사기, pre-commit 훅, `.gitignore`, 합성 데이터 생성기) |
 | 불변조건 자동 테스트 | DI·FP 대부분이 합성 데이터에서 자동 테스트됨(§4). **실제 템플릿·실자료·Windows Excel·업로드 시스템은 미검증** |
 | Windows Excel 실검증 | **미수행** |
@@ -115,6 +116,7 @@ H1 WINS/WRIS 값 vs 수식 · H2 출력 학번 셀 타입 · H3 사업별 상수
 - 이전 `VALIDATION-AND-TESTS.md`의 "마스킹 예시를 검토 후 저장소에 포함" 문구는 삭제했다(커밋 금지로 통일).
 
 ## 9. 다음 단계 후보 (사용자 승인 필요)
+0. **Phase 5-A 마무리**: 미커밋 변경의 커밋·푸시 → `build-windows.yml` Windows CI 실행(워크플로 개편은 Windows에서 한 번도 실행되지 않음) → PR 생성(병합은 사용자). 이후 Phase 5-B 학교 PC UAT(`docs/UAT-CHECKLIST.md`)는 사용자가 직접 수행. 2026-11-05 로컬 전체 테스트와 공개 안전 검사(작업트리)는 통과했으나 Windows 실행·UAT 전이다.
 1. **사용자 작업**: `private/policy.local.json`의 자리표시자 5개(제목, 근로구분명, 구분코드 2종, 적요)를 채운 뒤 실제 파일로 `--policy` 변환을 실행한다(오류 코드·건수만 확인 가능). 이 값들은 추정하지 않는다(H3).
 2. 블로커 해소: Windows Excel에서 출력 열기(FP-13), 업로드 호환성(H1/H2), 정책 결정(H3·H5, M17~M21).
 3. 비공개 설정(실제 머리글·상수) 주입 형식 설계, 이후 Tkinter GUI·PyInstaller·Actions(각각 승인 필요).
