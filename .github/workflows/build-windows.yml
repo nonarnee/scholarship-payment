@@ -1,5 +1,7 @@
 name: build-windows
 # 합성 데이터만 사용한다. 실제 업무 파일은 저장소에도 CI에도 올리지 않는다.
+# 산출물(배포 후보 rc): ① 신규 PySide6 화면(기본, ScholarshipPayment-v…)  ② 기존 Tkinter 화면(legacy, ScholarshipPaymentLegacyTk-v…, 한 릴리스 병행)
+# ③ 개발용 확인 빌드(ScholarshipPaymentUI-dev, 합성 E2E 전용·사용자 배포 금지). CI 통과는 자동 확인일 뿐 학교 PC·Windows Excel 검증이 아니다.
 on:
   workflow_dispatch:
   pull_request:
@@ -10,8 +12,11 @@ permissions:
   contents: read
 
 jobs:
+  # 기존 Tkinter 화면(legacy). PySide6 없이 빌드·테스트한다(Qt 테스트는 건너뜀).
   build:
     runs-on: windows-latest
+    outputs:
+      artifact: ${{ steps.build.outputs.artifact }}      # 다음 작업이 legacy 산출물을 내려받아 엔진을 비교한다
     env:
       PYTHONUTF8: "1"        # 러너 콘솔(cp1252)에서 한글 출력이 깨지지 않도록
     steps:
@@ -20,7 +25,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install
-        run: python -m pip install -e ".[dev]" pyinstaller==6.11.1
+        run: python -m pip install -c packaging/rc-constraints.txt -e ".[dev]" pyinstaller==6.11.1
       - name: Public safety check
         run: python tools/safety/check_public_safety.py --tracked
       - name: Tests
@@ -29,30 +34,32 @@ jobs:
         run: python packaging/ci_smoke.py
       - name: Tk available
         run: python -c "import tkinter; r = tkinter.Tk(); r.destroy(); print('tk ok')"
-      - name: Build app folder (onedir)
+      - name: Build legacy Tk folder (onedir)
         id: build
         shell: bash
         run: |
-          v=$(python -c "import scholarship_payment as s; print(s.__version__)")
-          n="ScholarshipPayment-v${v}"
-          python packaging/make_version_info.py version_info.txt
-          pyinstaller --noconfirm --onedir --windowed --name "$n" \
-            --version-file version_info.txt \
-            --paths src --collect-submodules msoffcrypto \
-            packaging/run_gui.py
-          (cd "dist/$n" && sha256sum "$n.exe" > SHA256SUMS.txt && cat SHA256SUMS.txt)
-          echo "name=${n}-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
-          echo "dir=dist/$n" >> "$GITHUB_OUTPUT"
+          python packaging/build_release.py --kind legacy
+          echo "exe=$(python packaging/release_info.py exe-name legacy)" >> "$GITHUB_OUTPUT"
+          echo "artifact=$(python packaging/release_info.py artifact-name legacy "$GITHUB_SHA")" >> "$GITHUB_OUTPUT"
+      - name: Inspect legacy build
+        shell: bash
+        run: python tools/ci/inventory_dist.py "dist/${{ steps.build.outputs.exe }}" --kind legacy --platform windows --json inventory-legacy.json
       - uses: actions/upload-artifact@v4
         with:
-          name: ${{ steps.build.outputs.name }}
-          path: ${{ steps.build.outputs.dir }}
+          name: ${{ steps.build.outputs.artifact }}
+          path: dist/${{ steps.build.outputs.exe }}
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-inventory-legacy-${{ github.sha }}
+          path: inventory-legacy.json
           if-no-files-found: error
 
-  # 신규 PySide6 화면(Phase 1) 확인용. 위 build 작업과 독립이며 배포 산출물에는 영향이 없다.
-  # 합격 기준은 두지 않는다: 폴더 크기와 smoke 실행 시간은 기록만 한다.
+  # 신규 PySide6 화면(배포 후보의 기본 GUI). legacy 와 같은 엔진인지, 정식 exe 에 개발용 기능이 없는지, 패키징된 exe 에서 생성 경로가 되는지 확인한다.
+  # 합격 기준(크기·시간)은 두지 않는다: 폴더 크기와 실행 시간은 기록만 한다.
   ui-foundation:
     runs-on: windows-latest
+    needs: build
     env:
       PYTHONUTF8: "1"
       QT_QPA_PLATFORM: offscreen      # 러너에는 화면이 없으므로 offscreen 으로 그린다(DPI·실제 외관은 수동 확인)
@@ -62,39 +69,88 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install
-        run: python -m pip install -e ".[dev,gui]" pyinstaller==6.11.1
+        run: python -m pip install -c packaging/rc-constraints.txt -e ".[dev,gui]" pyinstaller==6.11.1
       - name: UI tests
         run: python -m pytest -q tests/ui
       - name: Dev entry smoke (python)
         run: python -m scholarship_payment.ui --smoke
-      - name: Build PySide6 folder (onedir)
-        run: >
-          pyinstaller --noconfirm --onedir --windowed --name ScholarshipPaymentUI-dev
-          --paths src --exclude-module PySide6.QtNetwork
-          packaging/run_ui_dev.py
-      - name: Smoke the built exe and record size/time
+      - name: Build production PySide6 folder (onedir)
+        id: qt
+        shell: bash
+        run: |
+          python packaging/build_release.py --kind qt
+          echo "exe=$(python packaging/release_info.py exe-name qt)" >> "$GITHUB_OUTPUT"
+          echo "artifact=$(python packaging/release_info.py artifact-name qt "$GITHUB_SHA")" >> "$GITHUB_OUTPUT"
+      - name: Inspect production build (Qt libraries, plugins, forbidden files, bundled modules)
+        shell: bash
+        run: |
+          python tools/ci/inventory_dist.py "dist/${{ steps.qt.outputs.exe }}" --kind qt --platform windows --json inventory-qt.json | tee inventory-qt.txt
+          { echo "### Qt inventory (Windows runner build)"; echo '```'; cat inventory-qt.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+      - name: Verify SHA256SUMS of the production build
         shell: pwsh
         run: |
-          $dir = "dist/ScholarshipPaymentUI-dev"
-          $mb = [math]::Round(((Get-ChildItem $dir -Recurse -File | Measure-Object Length -Sum).Sum / 1MB), 1)
-          $t = Measure-Command { $p = Start-Process -FilePath "$dir/ScholarshipPaymentUI-dev.exe" -ArgumentList "--smoke" -Wait -PassThru }
-          $line = "PySide6 onedir: $mb MB, smoke exit code $($p.ExitCode), smoke time $([math]::Round($t.TotalSeconds,2)) s (offscreen, CI runner)"
+          $dir = "dist/${{ steps.qt.outputs.exe }}"
+          $bad = 0
+          foreach ($line in Get-Content "$dir/SHA256SUMS.txt" -Encoding UTF8) {
+            if (-not $line.Trim()) { continue }
+            $hash, $name = $line -split ' \*', 2
+            $actual = (Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $dir $name)).Hash.ToLower()
+            if ($actual -ne $hash) { Write-Output "MISMATCH: $name"; $bad++ }
+          }
+          if ($bad -gt 0) { exit 1 }
+          Write-Output "SHA256SUMS verified"
+      - name: Download the legacy Tk build for the engine comparison
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.build.outputs.artifact }}
+          path: legacy-dist
+      - name: Compare engine bytecode (Qt exe vs legacy Tk exe)
+        shell: bash
+        run: |
+          if [ -d legacy-dist ] && [ -n "$(ls -A legacy-dist)" ]; then
+            python tools/ci/compare_engine.py "dist/${{ steps.qt.outputs.exe }}" legacy-dist
+          else
+            echo "legacy 산출물을 내려받지 못해 엔진 비교를 건너뜀(미검증)"; exit 1
+          fi
+      - name: Smoke the production exe and check that development flags are not exposed
+        shell: pwsh
+        run: |
+          $exe = "dist/${{ steps.qt.outputs.exe }}/${{ steps.qt.outputs.exe }}.exe"
+          $mb = [math]::Round(((Get-ChildItem "dist/${{ steps.qt.outputs.exe }}" -Recurse -File | Measure-Object Length -Sum).Sum / 1MB), 1)
+          $t = Measure-Command { $p = Start-Process -FilePath $exe -ArgumentList "--smoke" -Wait -PassThru }
+          $line = "Production PySide6 onedir: $mb MB, --smoke exit code $($p.ExitCode), time $([math]::Round($t.TotalSeconds,2)) s (offscreen, CI runner)"
           Write-Output $line
           Add-Content $env:GITHUB_STEP_SUMMARY $line
           if ($p.ExitCode -ne 0) { exit 1 }
-      # 패키징된 exe 가 합성 입력으로 Step 1→2→3 생성 경로를 끝까지 실행하는지 확인한다(실제 자료·업무 로직 변경 없음).
+          $work = Join-Path $env:RUNNER_TEMP "neg"
+          New-Item -ItemType Directory -Force -Path $work | Out-Null
+          foreach ($flags in @(@("--gallery"), @("--synthetic-e2e-smoke"), @("--synthetic-e2e-smoke", "--work-dir", $work, "--result-json", (Join-Path $work "r.json")), @("--unknown"))) {
+            $q = Start-Process -FilePath $exe -ArgumentList $flags -Wait -PassThru
+            Write-Output "flags '$($flags -join ' ')' -> exit code $($q.ExitCode)"
+            if ($q.ExitCode -ne 2) { Write-Output "개발용·알 수 없는 옵션이 거부되지 않았다"; exit 1 }
+          }
+          if (Test-Path (Join-Path $work "r.json")) { Write-Output "개발용 옵션이 실행되어 결과를 만들었다"; exit 1 }
+      - name: Build development exe (synthetic E2E only, never distributed)
+        id: dev
+        shell: bash
+        run: |
+          python packaging/build_release.py --kind dev
+          echo "exe=$(python packaging/release_info.py exe-name dev)" >> "$GITHUB_OUTPUT"
+          echo "artifact=$(python packaging/release_info.py artifact-name dev "$GITHUB_SHA")" >> "$GITHUB_OUTPUT"
+      # 패키징된 개발용 exe 가 합성 입력으로 Step 1→2→3 생성 경로를 끝까지 실행하는지 확인한다(실제 자료·업무 로직 변경 없음).
       # 확인 범위: 모듈 로딩·합성 Excel 파싱·정책/템플릿 로딩·미리보기·XLSX 생성과 출력 재검증·무덮어쓰기·암호 파일·폴더 오류 재시도.
       # 확인하지 않는 범위: 실제 창·글꼴·DPI, 파일 선택 대화상자, 드래그 앤 드롭, 폴더 열기·클립보드, 실제 Excel 에서 열기.
+      # 주의: 이 E2E 는 개발용 exe 로 실행한다(정식 exe 에는 개발 옵션이 없다). 두 exe 는 같은 모듈·같은 빌드 설정으로 만들고, 정식 exe 는 위 --smoke·점검·엔진 비교로 확인한다.
       - name: Prepare synthetic E2E inputs
         run: python tools/ci/prepare_e2e_inputs.py "$env:RUNNER_TEMP/e2e"
-      - name: Synthetic E2E in the packaged exe (parse, preview, generate)
+      - name: Synthetic E2E in the packaged dev exe (parse, preview, generate)
         shell: pwsh
         run: |
           $work = Join-Path $env:RUNNER_TEMP "e2e"
           $res = Join-Path $work "result.json"
-          $dir = "dist/ScholarshipPaymentUI-dev"
-          $t = Measure-Command { $p = Start-Process -FilePath "$dir/ScholarshipPaymentUI-dev.exe" -ArgumentList @("--synthetic-e2e-smoke", "--work-dir", $work, "--result-json", $res) -Wait -PassThru }
-          $line = "Packaged exe synthetic E2E: exit code $($p.ExitCode), time $([math]::Round($t.TotalSeconds,2)) s (offscreen, CI runner)"
+          $dir = "dist/${{ steps.dev.outputs.exe }}"
+          $t = Measure-Command { $p = Start-Process -FilePath "$dir/${{ steps.dev.outputs.exe }}.exe" -ArgumentList @("--synthetic-e2e-smoke", "--work-dir", $work, "--result-json", $res) -Wait -PassThru }
+          $line = "Packaged dev exe synthetic E2E: exit code $($p.ExitCode), time $([math]::Round($t.TotalSeconds,2)) s (offscreen, CI runner)"
           Write-Output $line
           Add-Content $env:GITHUB_STEP_SUMMARY $line
           if (Test-Path $res) { Get-Content $res -Encoding UTF8 | Write-Output }
@@ -103,11 +159,23 @@ jobs:
         run: python tools/ci/verify_e2e_outputs.py "$env:RUNNER_TEMP/e2e" "$env:RUNNER_TEMP/e2e/result.json" --require-frozen
       - uses: actions/upload-artifact@v4
         with:
+          name: ${{ steps.qt.outputs.artifact }}
+          path: dist/${{ steps.qt.outputs.exe }}
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-inventory-qt-${{ github.sha }}
+          path: |
+            inventory-qt.json
+            inventory-qt.txt
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
           name: ScholarshipPaymentUI-e2e-synthetic-outputs-${{ github.sha }}
           path: ${{ runner.temp }}/e2e
           if-no-files-found: error
       - uses: actions/upload-artifact@v4
         with:
-          name: ScholarshipPaymentUI-dev-${{ github.sha }}
-          path: dist/ScholarshipPaymentUI-dev
+          name: ${{ steps.dev.outputs.artifact }}
+          path: dist/${{ steps.dev.outputs.exe }}
           if-no-files-found: error
