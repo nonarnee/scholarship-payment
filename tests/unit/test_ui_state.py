@@ -309,3 +309,65 @@ def test_apply_after_apply_keeps_session_out_dir_choice_if_default_unchanged(sto
     assert m.paths["out_dir"] == str(a)
     m.apply_settings(store.settings.with_paths("daechung", out_dir=str(b)))
     assert m.paths["out_dir"] == str(b)
+
+
+# ---------- 정책 파일 수정 알림·재검사 ----------
+def test_policy_edited_restarts_the_check_for_the_selected_file_only(store, policy, tmp_path):
+    out = tmp_path / "out"
+    out.mkdir()
+    runner = ManualRunner()
+    m = make_model(configured(store, policy, out), runner)
+    runner.run_all()
+    assert m.state("policy").ok
+    token = m._checks._tokens["policy"]
+    seen = []
+    m.on_policy_edited(seen.append)
+    other = tmp_path / "other.json"
+    other.write_text("{}", encoding="utf-8")
+    m.policy_edited(str(other))                                       # 다른 파일의 수정은 무시한다
+    assert m._checks._tokens["policy"] == token and seen == [] and m.state("policy").ok
+    m.policy_edited(str(policy))
+    assert m._checks._tokens["policy"] > token and seen == [str(policy)]
+    assert m.state("policy").level == v.CHECKING                      # 이전 성공 결과를 그대로 쓰지 않고 다시 검사한다
+    runner.run_all()
+    assert m.state("policy").ok
+
+
+def test_policy_edited_catches_a_change_even_when_size_and_mtime_are_the_same(store, policy, tmp_path):
+    import os
+    out = tmp_path / "out"
+    out.mkdir()
+    runner = ManualRunner()
+    m = make_model(configured(store, policy, out), runner)
+    runner.run_all()
+    s = policy.stat()
+    data = bytearray(policy.read_bytes())
+    i = data.index(b"ZZ0001")
+    data[i:i + 6] = b"{{{{{{"                                       # 같은 길이로 깨뜨린다(형식 오류가 되는 값은 아니지만 내용은 달라진다)
+    policy.write_bytes(bytes(data))
+    os.utime(policy, ns=(s.st_atime_ns, s.st_mtime_ns))
+    m.recheck()                                                       # 크기·시각만 보는 기존 재확인은 놓친다
+    assert m.state("policy").ok
+    token = m._checks._tokens["policy"]
+    m.policy_edited(str(policy))                                      # 수정 알림은 무조건 다시 검사한다
+    assert m._checks._tokens["policy"] > token
+
+
+def test_draft_refresh_check_rechecks_without_changing_settings(store, policy, tmp_path):
+    runner = ManualRunner()
+    d = st.SettingsDraft(configured(store, policy, tmp_path).settings, runner, default_dirs=[])
+    d.check_displayed("daechung")
+    runner.run_all()
+    token = d._checks._tokens[("daechung", "policy_path")]
+    d.refresh_check("daechung", "policy_path")
+    assert d._checks._tokens[("daechung", "policy_path")] > token and d.changed() == [] and d.value("daechung", "policy_path") == str(policy)
+    runner.run_all()
+    assert d.state("daechung", "policy_path").ok
+
+
+def test_draft_refresh_check_does_not_turn_an_auto_found_policy_into_a_saved_path(store, policy, tmp_path):
+    d = st.SettingsDraft(store.settings, InlineRunner(), default_dirs=[tmp_path])        # tmp_path 에 policy_daechung.json 이 있어 자동 탐색된다
+    path, auto = d.effective("daechung", "policy_path")
+    assert auto and path == str(policy)
+    d.refresh_check("daechung", "policy_path")
+    assert d.value("daechung", "policy_path") is None and d.changed() == [] and d.state("daechung", "policy_path").ok

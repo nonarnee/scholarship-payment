@@ -125,10 +125,18 @@ class _Checks:
             return False
 
 
+def _same_file(a, b) -> bool:
+    try:
+        return os.path.samefile(a, b)
+    except (OSError, TypeError, ValueError):
+        return os.path.normcase(os.path.abspath(str(a))) == os.path.normcase(os.path.abspath(str(b)))
+
+
 class Step1Model:
     def __init__(self, store: SettingsStore, runner: Runner, today: Callable[[], date] = date.today, default_dirs: list | None = None) -> None:
         self.store, self._today, self._dirs = store, today, default_dirs
         self._listeners: list[Callable[[], None]] = []
+        self._policy_listeners: list[Callable[[str], None]] = []
         self._checks = _Checks(runner, self._notify)
         self.persist_failed = False
         self.program = store.settings.last_program or PROGRAM_CODES[0]
@@ -205,6 +213,20 @@ class Step1Model:
         self._checks.set("out_dir", "dir", path)          # 이번 실행에만 적용(기본 폴더 설정은 고급 설정에서)
         self._notify()
 
+    def on_policy_edited(self, fn: Callable[[str], None]) -> None:
+        self._policy_listeners.append(fn)
+
+    def policy_edited(self, path) -> None:
+        """정책 파일이 수정·저장되었다. 지금 선택된 정책 파일이면 검사를 처음부터 다시 하고(이전 성공 결과를 쓰지 않는다) 구독자에게 알린다.
+        파일의 크기·수정 시각이 같아도 다시 검사한다. 다른 파일이면 아무것도 하지 않는다."""
+        current = self._checks.paths.get("policy")
+        if not current or not _same_file(current, path):
+            return
+        self._checks.set("policy", "policy", current)
+        self._notify()
+        for fn in list(self._policy_listeners):
+            fn(current)
+
     def apply_settings(self, new: us.UserSettings) -> ApplyOutcome:
         before = self.store.settings.paths(self.program).out_dir
         outcome = self.store.commit(new)
@@ -255,6 +277,23 @@ class SettingsDraft:
                 continue
             path, _ = self.effective(program, key)
             self._checks.set((program, key), _DRAFT_KIND[key], path)
+
+    def refresh_check(self, program: str, key: str) -> None:
+        """설정값은 그대로 두고 표시 중인 경로의 검사만 다시 한다(파일 내용이 바뀐 뒤). 자동 탐색한 경로를 저장값으로 만들지 않는다."""
+        path, _ = self.effective(program, key)
+        self._checks.set((program, key), _DRAFT_KIND[key], path)
+        self._notify()
+
+    def refresh_same_file(self, key: str, path) -> None:
+        """같은 파일을 가리키는 **모든** 사업의 검사를 다시 한다(여러 사업이 같은 정책 JSON 경로를 쓰는 경우, 한 탭에서 수정하면
+        다른 탭의 이전 검사 결과가 수정 전 상태로 남지 않게). 설정값은 바꾸지 않는다. 아직 확인한 적 없는 사업은 보여 줄 때 새로 검사하므로 건드리지 않는다."""
+        for program, k in list(self._checks.states):
+            if k != key:
+                continue
+            shown, _ = self.effective(program, key)
+            if shown and _same_file(shown, path):
+                self._checks.set((program, key), _DRAFT_KIND[key], shown)
+        self._notify()
 
     def state(self, program: str, key: str) -> v.FieldState:
         return self._checks.states.get((program, key), v.UNSET_STATE)

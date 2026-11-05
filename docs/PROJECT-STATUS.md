@@ -24,6 +24,7 @@
 | 신규 화면(PySide6) — Phase 3 (`prepare()`/`finish()` 분리 + Step 2 읽기 전용 미리보기) | `feat/ui-step2-preview` 브랜치: 변환 쪽은 `app/convert.py`(기존 계약 유지, SHA-256 변경 감지)와 `app/controller.py`(신규 `changed` 단계 안내 한 분기)만 변경, `app/workflow.py`, `ui/preview.py`, `ui/step2.py`, `ui/issue_text.py`. Adapter·Validator·Writer·정책·Tk·CLI **무변경**. 골든 동등성 4종과 자동 테스트 920 passed(합성 데이터), macOS offscreen 캡처로만 확인. **Windows 실행·DPI·CI, 실제 원본·정책으로의 미리보기 미검증.** 지급명단 생성 버튼·결과 화면은 Phase 4. 상세: `docs/UI-FRAMEWORK.md` §7 |
 | 신규 화면(PySide6) — Phase 4 (지급명단 생성 + Step 3 결과 화면) | **main 병합됨(PR #23)**: `app/workflow.py`(`run_finish`), `ui/generation.py`, `ui/step3.py`, 이동 잠금·창 닫기 차단, 전용 생성 워커. 변환 엔진(Adapter·Validator·Writer·`safe_save`·`convert.py`)·정책·Tk·CLI **무변경**. 합성 데이터 자동 테스트·Windows CI 통과, UI 생성 결과가 골든과 동일, 패키징된 개발용 exe 의 합성 E2E 통과. 기능 구현과 자동 검증까지만이며 최종 완료가 아니다. **Windows 실행·DPI·CI, 실제 재단 원본·정책·학교 PC 저장 동작, 강제 종료 시 임시 파일 정리 미검증(보장하지 않음).** 상세: `docs/UI-FRAMEWORK.md` §8. 패키징된 exe 의 합성 E2E 스모크(`--synthetic-e2e-smoke`)로 생성 경로를 CI 에서 확인(범위·한계는 §9) |
 | 배포 후보 준비 — Phase 5-A (`0.3.0-rc.1`) | `feat/release-rc1` 브랜치(미커밋·검토 대기): 정식 PySide6 진입점(`packaging/run_gui_qt.py`, 개발 옵션 거부), 정보 화면, 빌드 스크립트·산출물 점검·엔진 동일성 비교·고지문 생성, 설치 안내·LICENSES, 버전 고정, 워크플로 개편(Qt 기본 + legacy 병행 + 개발용 E2E). 변환 엔진·정책·Tk·CLI **무변경**. 합성 데이터 자동 테스트와 macOS 로컬 PyInstaller 예비 빌드로만 확인했고 **Windows CI 실행 전**. 정식 배포·Phase 5-B(학교 PC UAT)는 **미수행**. 상세: `docs/RELEASE-RC1.md`, `docs/LICENSE-REVIEW.md`, `docs/UAT-CHECKLIST.md` |
+| 정책 파일 수정(`feat/policy-edit`, 구현만·미커밋) | 고급 설정 대화상자의 `정책 파일 수정...`(Step 1에서만, 생성 중에는 불가). 기존 JSON 을 열어 5개 값(다문화·탈북학생 멘토링은 시급(도시)·시급(농어촌) 두 칸 포함)만 고친다. 저장은 같은 검증 → SHA-256 충돌 확인 → 임시 파일 → 백업(임시 파일에 쓰고 원본과 같은지 확인한 뒤에만 `.bak*` 이름으로 공개, 기존 백업 무덮어쓰기·무삭제, 백업이 완전하지 않으면 원본을 교체하지 않음) → `os.replace`. 저장은 파일에 즉시 반영되며 이후 고급 설정에서 취소해도 되돌아가지 않는다고 화면에 안내한다. 여러 사업이 같은 정책 파일을 쓰면 수정 후 모두 다시 검사한다. 도시·농어촌 외 시급 키가 있으면 수정 차단. 수정 후 정책 검사를 다시 하고 미리보기를 재사용하지 않는다. 정책 만들기 화면도 시급 두 칸으로 바꿨고 CLI·Tk 의 `rates_text` 경로는 유지. JSON 스키마·Adapter·Validator·Writer·safe_save·convert **무변경**. 합성 데이터 자동 테스트와 macOS offscreen 캡처로만 확인, **Windows 실행·CI·실제 원본의 괄호 값 일치(OPEN M32) 미검증** |
 | 공개 안전 체계 | 구현됨 (검사기, pre-commit 훅, `.gitignore`, 합성 데이터 생성기) |
 | 불변조건 자동 테스트 | DI·FP 대부분이 합성 데이터에서 자동 테스트됨(§4). **실제 템플릿·실자료·Windows Excel·업로드 시스템은 미검증** |
 | Windows Excel 실검증 | **미수행** |
@@ -109,6 +110,8 @@ H1 WINS/WRIS 값 vs 수식 · H2 출력 학번 셀 타입 · H3 사업별 상수
 - **실제 템플릿**: 자동 테스트는 합성 템플릿으로만 한다. 로컬 스모크에서 실제 템플릿은 정책(제외 시트 이름, WRIS 머리글)을 맞추면 통과했다(위 표). 정책이 다르면 `TEMPLATE_LAYOUT`으로 차단되며 의도된 동작이다. 실제 머리글·상수는 외부 설정으로 주입해야 하지만 **주입 파일 형식은 아직 없다**(`OutputPolicy` 객체까지만).
 - 출력 xlsx는 openpyxl이 쓴다: `printerSettings`·`calcChain`·수식 캐시 소실(FP-11 허용 손실). 조건부 서식은 템플릿에 있는 시트에서만 단일 범위 규칙으로 재작성하며 없는 시트에는 만들지 않는다.
 - **임시 규칙(사용자 확인 필요)**: ① 계좌번호가 숫자 셀이면 BLOCK(선행 0·하이픈 검증 불가) ② 시간 표기는 `N시간`/`N시간M분`(M 0~59, 공백·소수 불허)만 허용 ③ 금액 문자열은 숫자만 허용(쉼표·부호 불허). 실제 데이터에서 이 표기가 아닌 값이 나오면 차단된다 — `OPEN-QUESTIONS.md` M12~M14.
+
+- **정책 파일 수정의 한계**: 마지막 SHA-256 확인과 `os.replace` 사이의 극히 짧은 경합은 완전히 막지 못한다(파일 잠금을 쓰지 않는다). 강제 종료 시 `.policy-edit-*.tmp`·`.policy-backup-*.tmp` 가 남을 수 있고 자동 정리하지 않는다. 교체 단계에서 실패하면 그 직전에 만든 완전한 백업이 남는다(백업은 자동 삭제하지 않는다). 학교 PC의 권한·파일 잠금 환경(Excel·백신이 파일을 잡고 있는 경우 등)에서의 동작은 미검증이다.
 
 ## 8. 문서 정합성 메모 (2026-11-02 점검)
 - `FIRST-PROMPT.md`의 "이번 요청은 설계만"은 **시작 시점의 범위**다. 현재 범위는 `CLAUDE.md` §6(구현은 명시 승인 후)이 정한다.

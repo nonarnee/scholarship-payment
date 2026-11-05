@@ -7,6 +7,7 @@ from PySide6.QtCore import QEvent, QSize, Qt
 from PySide6.QtWidgets import (QFrame, QHBoxLayout, QLabel, QMainWindow, QScrollArea, QStackedWidget, QVBoxLayout, QWidget)
 
 from scholarship_payment import __version__
+from scholarship_payment.app.convert import CHANGED_CODE
 from scholarship_payment.ui.context import AppContext
 from scholarship_payment.ui.navigation import STEP_TITLES, Navigator, Step
 from scholarship_payment.ui import generation as gn
@@ -75,6 +76,8 @@ class MainWindow(QMainWindow):
         self.step1 = Step1Page(self.model, self.context)
         self.step2 = Step2Page(PreviewSession(self.context.runner), self.context)
         self.generation = GenerationSession(self.context.gen_runner, now=self.context.now)         # 생성 전용 워커
+        self.step1.policy_edit_allowed = lambda: self.navigator.current == Step.FILE and not self.generation.busy      # 정책 수정은 첫 단계에서만, 생성 중에는 불가
+        self.model.on_policy_edited(self._on_policy_edited)
         self.step3 = Step3Page(self.generation, self.step2.session, self.model, self.context, open_settings=lambda: self.step1.open_settings(),
                                go_file=self.restart_from_file_selection, new_conversion=self.start_new_conversion)
         self.stack = QStackedWidget()
@@ -124,6 +127,12 @@ class MainWindow(QMainWindow):
         self._sync_ready()
         self._sync_review_ready()
         self._sync()
+
+    def _on_policy_edited(self, _path: str) -> None:
+        """정책 파일이 수정되었다: 이전 미리보기 결과를 다시 쓰지 않는다(자동으로 다시 읽지도 않는다). 처음 단계에서 수정하면 확인 결과는 이미 버려져 있다."""
+        session = self.step2.session
+        if session.prepared is not None and session.state == pv.READY:
+            session.invalidate(pv.REASON_FILES_CHANGED, {"policy": CHANGED_CODE}, after_generation=False)
 
     def _on_next(self) -> None:
         if self.navigator.current == Step.RESULT:
