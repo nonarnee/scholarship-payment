@@ -46,6 +46,11 @@ class PolicyWizardDialog(QDialog):
             label.setWordWrap(True)
             form.addRow(label, edit)
         col.addLayout(form)
+        if "rate_urban" in self.inputs:
+            note = QLabel(policy_flow.RATE_NOTE)
+            note.setProperty("role", "hint")
+            note.setWordWrap(True)
+            col.addWidget(note)
 
         row = QHBoxLayout()
         row.addWidget(QLabel("저장 위치"))
@@ -87,9 +92,9 @@ class PolicyWizardDialog(QDialog):
         self.error_label.show()
 
     def _create(self) -> None:
-        values = {k: e.text() for k, e in self.inputs.items() if k != "rates"}
-        rates = self.inputs["rates"].text() if "rates" in self.inputs else None
-        result = policy_flow.create_policy(self._template, values, self._target, self._program, rates)
+        values = {k: e.text() for k, e in self.inputs.items() if not k.startswith("rate_")}
+        rates = {k: e.text() for k, e in self.inputs.items() if k.startswith("rate_")}
+        result = policy_flow.create_policy(self._template, values, self._target, self._program, rate_values=rates or None)
         if not result.ok:
             self._show_error(result.codes or ("POLICY_OUTPUT_IO",))
             return

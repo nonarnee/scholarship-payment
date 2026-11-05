@@ -49,6 +49,7 @@ class Step1Page(QWidget):
     def __init__(self, model: Step1Model, context, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.model, self.ctx = model, context
+        self.policy_edit_allowed = lambda: True        # 정책 파일 수정 가능 여부. MainWindow 가 '첫 단계이고 생성 중이 아님'으로 바꿔 끼운다
         root = QVBoxLayout(self)
         m = SPACING["lg"]
         root.setContentsMargins(m, m, m, m)
@@ -250,7 +251,7 @@ class Step1Page(QWidget):
         self._set_message(self.source_message, validators.message(code))
 
     def build_settings_dialog(self) -> AdvancedSettingsDialog:
-        return AdvancedSettingsDialog(self.model, self.ctx, self)
+        return AdvancedSettingsDialog(self.model, self.ctx, self, policy_edit_allowed=lambda: self.policy_edit_allowed())
 
     def open_settings(self) -> None:
         self.build_settings_dialog().exec()

@@ -210,17 +210,18 @@ def test_wizard_needs_a_valid_template_first(qapp, make_context):
     w.close()
 
 
-def test_multicultural_wizard_has_rate_field(app_win):
+def test_multicultural_wizard_has_two_rate_fields(app_win):
     w, ctx = app_win
     d = w.step1.build_settings_dialog()
     d.tabs.set_current("multicultural"); d.tabs.changed.emit("multicultural")
     ctx.chooser.answers["template"].append(str(TEMPLATE))
     d.template_button.click()
     wz = d.build_wizard()
-    assert "rates" in wz.inputs
+    assert "rate_urban" in wz.inputs and "rate_rural" in wz.inputs and "rates" not in wz.inputs
     for k, val in SYNTH_VALUES.items():
         wz.inputs[k].setText(val)
-    wz.inputs["rates"].setText("가=1000, 나=2000")
+    wz.inputs["rate_urban"].setText("1000")
+    wz.inputs["rate_rural"].setText("2000")
     wz.create_button.click()
     assert wz.created_path and wz.created_path.is_file()
 

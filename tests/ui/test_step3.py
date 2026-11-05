@@ -337,6 +337,23 @@ def test_new_conversion_resets_everything_and_allows_a_second_conversion(inline,
     assert sorted(p.name for p in out_dir.iterdir()) == [NAME, NAME.replace(".xlsx", "_2.xlsx")]
 
 
+def test_policy_edited_after_preview_blocks_generation_and_creates_nothing(manual, make_input, out_dir, policy_file):
+    """정책 JSON 을 수정(저장)한 뒤에는 그 전의 확인 결과(Prepared)로 지급명단을 만들 수 없다."""
+    from scholarship_payment.config import policy_edit as pe
+    w, r = manual
+    to_step2(w, make_input(n=3))
+    generate(w)
+    before = listing(out_dir)
+    sess = pe.open_for_edit(policy_file, "daechung")
+    assert pe.save_policy_replace(sess, pe.edited_data(sess, {**{k: sess.data[k] for k in pe.USER_KEYS}, "wins_work_name": "수정뒤"})).changed
+    r.run_all()
+    p = w.step2
+    assert w.navigator.current == Step.REVIEW and p.session.state == pv.INVALIDATED and p.session.invalid_reason == pv.REASON_FILES_CHANGED
+    assert "정책 파일" in p.message_label.text() and "만들지 않았습니다" in p.message_label.text()
+    assert listing(out_dir) == before and not [x for x in out_dir.iterdir() if x.name.startswith(".~")]      # 새 최종 파일도 임시 파일도 없다
+    assert not w.next_button.isEnabled() and p.retry_button.isVisibleTo(w)
+
+
 def test_new_conversion_is_refused_while_generating(manual, make_input):
     w, r = manual
     to_step2(w, make_input(n=3))
