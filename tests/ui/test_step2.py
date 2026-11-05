@@ -309,6 +309,71 @@ def test_layout_renders_at_minimum_size_and_body_scrolls(win, make_input):
     assert not win.grab().isNull() and win.step2.width() >= 700
 
 
+CARD_TITLES = ("지원 사업", "지급연월", "대상자 수", "지급 합계")
+LONG_PROGRAM = "가상 사업명이 아주 길어서 좁은 카드 안에서 여러 줄로 줄바꿈되는 경우 " * 2
+LONG_TOTAL = "9,999,999,999,999,999,999,999,999,999,999,999원 (줄바꿈 확인용)"
+
+
+def card_title_labels(p):
+    found = {x.text(): x for x in p.result_box.findChildren(QLabel) if x.property("role") == "hint" and x.text() in CARD_TITLES}
+    assert tuple(found) and set(found) == set(CARD_TITLES)
+    return found
+
+
+def title_tops(p):
+    """제목 글자가 실제로 그려지는 세로 위치. 라벨 상단이 같아도 라벨이 늘어나 있고 세로 가운데 정렬이면 글자는 아래로 밀리므로 정렬 방식까지 반영한다."""
+    from PySide6.QtCore import QPoint
+    out = {}
+    for t, lab in card_title_labels(p).items():
+        top = lab.mapTo(p.result_box, QPoint(0, 0)).y()
+        slack = max(0, lab.height() - lab.sizeHint().height())
+        al = lab.alignment()
+        if al & Qt.AlignmentFlag.AlignVCenter:
+            top += slack // 2
+        elif al & Qt.AlignmentFlag.AlignBottom:
+            top += slack
+        out[t] = top
+    return out
+
+
+@pytest.mark.parametrize("size", [(910, 650), (800, 600)])
+@pytest.mark.parametrize("long_text", [False, True])
+def test_summary_card_titles_share_one_top_even_when_values_wrap(win, make_input, size, long_text):
+    """회귀: 값이 줄바꿈되면 가장 높은 카드에 맞춰 다른 카드가 늘어나고 제목이 아래로 밀리던 문제."""
+    go_step2(win, make_input(n=4))
+    p = win.step2
+    if long_text:
+        p.program_value.setText(LONG_PROGRAM)
+        p.total_value.setText(LONG_TOTAL)
+    win.resize(*size)
+    QApplication.processEvents()
+    tops = title_tops(p)
+    assert len(set(tops.values())) == 1, tops
+    assert p.result_box.rect().contains(p.total_value.mapTo(p.result_box, p.total_value.rect().bottomRight()))
+
+
+def test_summary_card_titles_stay_aligned_on_a_small_screen(qapp, make_context, ready_settings, make_input):
+    from PySide6.QtCore import QSize
+    w = MainWindow(context=make_context(settings=ready_settings), available=QSize(910, 512))
+    w.show()
+    go_step2(w, make_input(n=4))
+    w.step2.program_value.setText(LONG_PROGRAM)
+    w.step2.total_value.setText(LONG_TOTAL)
+    QApplication.processEvents()
+    assert len(set(title_tops(w.step2).values())) == 1
+    w.close()
+
+
+def test_date_info_in_the_month_card_does_not_move_the_other_titles(win, make_input):
+    go_step2(win, make_input(n=4))
+    p = win.step2
+    before = title_tops(p)
+    p.date_value.setText("2099.10.07 (여러 줄로 길어지는 기준일 안내 문구 확인용 " * 3 + ")")
+    QApplication.processEvents()
+    after = title_tops(p)
+    assert len(set(after.values())) == 1 and len(set(before.values())) == 1
+
+
 def test_failed_state_offers_an_explicit_recheck_button_and_it_restarts_from_scratch(qapp, make_context, ready_settings, make_input, tmp_path):
     w = open_window(make_context, ready_settings)
     src = make_input(n=5, mutate=lambda ws: ws.__setitem__("F7", ws["F5"].value))

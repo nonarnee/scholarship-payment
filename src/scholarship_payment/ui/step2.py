@@ -149,6 +149,10 @@ class Step2Page(QWidget):
                 small.setProperty("role", "hint")
                 card.body.addWidget(small)
                 card.body.addWidget(extra[1])
+            # 값이 줄바꿈된 카드가 행 높이를 정해도 다른 카드의 제목이 밀리지 않게, 글자는 위에 붙이고 남는 높이는 아래 빈 공간으로 보낸다.
+            for label in (cap, value) + (() if extra is None else (small, extra[1])):
+                label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+            card.body.addStretch(1)
             cards.addWidget(card, 1)
         rl.addLayout(cards)
         self.result_badge = Badge("확인한 범위에서 차단 오류 없음", "verified")
