@@ -11,7 +11,6 @@
 from __future__ import annotations
 
 import hashlib
-import importlib
 import json
 import shutil
 import sys
@@ -25,16 +24,13 @@ from scholarship_payment.app import workflow
 from scholarship_payment.config.user_settings import UserSettings
 from scholarship_payment.ui import generation as gn
 from scholarship_payment.ui import preview as pv
+from scholarship_payment.ui import runtime_check
 from scholarship_payment.ui.context import AppContext
 from scholarship_payment.ui.main_window import MainWindow
 from scholarship_payment.ui.navigation import Step
 from scholarship_payment.ui.qt_runner import QtRunner
 from scholarship_payment.ui.state import SettingsStore
 
-REQUIRED_MODULES = ("openpyxl", "msoffcrypto", "cryptography", "scholarship_payment.app.convert", "scholarship_payment.app.workflow",
-                    "scholarship_payment.adapters.daechung", "scholarship_payment.adapters.source", "scholarship_payment.validation.validator",
-                    "scholarship_payment.writers.template_writer", "scholarship_payment.writers.output_check", "scholarship_payment.io.safe_save",
-                    "scholarship_payment.ui.step3", "PySide6.QtWidgets")
 WAIT_SECONDS = 90
 
 
@@ -196,12 +192,9 @@ STEPS = (("plain_with_existing_result", _step_plain_with_existing), ("encrypted_
 def run(work_dir, result_json) -> int:
     work = Path(work_dir)
     facts: dict = {"frozen": bool(getattr(sys, "frozen", False)), "modules": {}, "steps": [], "outputs": {}}
-    for name in REQUIRED_MODULES:
-        try:
-            importlib.import_module(name)
-            facts["modules"][name] = True
-        except Exception:
-            facts["modules"][name] = False
+    missing = set(runtime_check.missing_modules())
+    for name in runtime_check.REQUIRED_MODULES:
+        facts["modules"][name] = name not in missing
     facts["steps"].append({"name": "modules", "ok": all(facts["modules"].values())})
     ok = facts["steps"][0]["ok"]
     driver = None

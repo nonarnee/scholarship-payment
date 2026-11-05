@@ -11,6 +11,7 @@ from scholarship_payment.ui.context import AppContext
 from scholarship_payment.ui.navigation import STEP_TITLES, Navigator, Step
 from scholarship_payment.ui import generation as gn
 from scholarship_payment.ui import preview as pv
+from scholarship_payment.ui.about import AboutDialog
 from scholarship_payment.ui.generation import GenerationSession
 from scholarship_payment.ui.preview import PreviewSession
 from scholarship_payment.ui.state import Step1Model
@@ -106,7 +107,10 @@ class MainWindow(QMainWindow):
 
         version = QLabel(f"v{__version__}")
         notice = QLabel("이 프로그램은 네트워크를 사용하지 않습니다")
+        self.about_button = AppButton("정보", "link")
+        self.about_button.clicked.connect(self.open_about)
         self.statusBar().addWidget(notice, 1)
+        self.statusBar().addPermanentWidget(self.about_button)
         self.statusBar().addPermanentWidget(version)
         self.statusBar().setSizeGripEnabled(False)
 
@@ -176,6 +180,12 @@ class MainWindow(QMainWindow):
             return
         needed = [BLOCKING_LABELS[f] for f in self.model.blocking()] if self.navigator.current == Step.FILE else []
         self.footer_hint.setText("필요: " + ", ".join(needed) if needed else "")
+
+    def build_about_dialog(self) -> AboutDialog:
+        return AboutDialog(self.context, self)
+
+    def open_about(self) -> None:
+        self.build_about_dialog().exec()
 
     def changeEvent(self, event) -> None:
         super().changeEvent(event)
