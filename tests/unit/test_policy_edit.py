@@ -571,3 +571,28 @@ def test_tk_and_cli_call_style_with_positional_rates_text_is_unchanged(tmp_path)
     with pytest.raises(ValidationFailed):
         make_policy_file(TEMPLATE, VALUES, tmp_path / "q.json", "multicultural", "형식이 틀림")
     assert not (tmp_path / "q.json").exists()
+
+
+# ---------- 줄바꿈과 해시 (Windows CI 에서 발견: 텍스트 모드 쓰기가 \n 을 \r\n 으로 바꿔 해시가 어긋났다) ----------
+@pytest.mark.parametrize("newline", [b"\n", b"\r\n"])
+def test_the_original_line_endings_are_kept_and_the_returned_hash_is_that_of_the_bytes_on_disk(tmp_path, newline):
+    path = make_policy(tmp_path)
+    path.write_bytes(path.read_bytes().replace(b"\r\n", b"\n").replace(b"\n", newline))      # 원본이 LF 또는 CRLF 인 정책
+    s = pe.open_for_edit(path, "daechung")
+    r = pe.save_policy_replace(s, pe.edited_data(s, NEW_VALUES))
+    written = path.read_bytes()
+    assert r.sha256 == sha(path) == hashlib.sha256(written).hexdigest()
+    assert (b"\r\n" in written) == (newline == b"\r\n") and (written.count(b"\n") == written.count(b"\r\n")) == (newline == b"\r\n")
+    assert pe.open_for_edit(path, "daechung").sha256 == r.sha256                                # 반환된 해시를 기준으로 다시 저장해도 충돌이 아니다
+    assert load_policy(path).wins_work_name == "새합성근로"
+    assert r.backup.read_bytes().count(b"\r\n") == (r.backup.read_bytes().count(b"\n") if newline == b"\r\n" else 0)
+
+
+def test_saving_twice_with_the_returned_hash_is_not_a_false_conflict(tmp_path):
+    path = make_policy(tmp_path)
+    path.write_bytes(path.read_bytes().replace(b"\n", b"\r\n"))
+    s = pe.open_for_edit(path, "daechung")
+    first = pe.save_policy_replace(s, pe.edited_data(s, NEW_VALUES))
+    s2 = pe.PolicyEditSession(path=path, sha256=first.sha256, program="daechung", data=json.loads(path.read_text(encoding="utf-8")))
+    second = pe.save_policy_replace(s2, pe.edited_data(s2, VALUES))
+    assert second.changed and load_policy(path).wins_work_name == "합성근로"

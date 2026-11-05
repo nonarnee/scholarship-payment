@@ -200,10 +200,12 @@ def save_policy_replace(session: PolicyEditSession, new_data: dict) -> EditSaveR
     except OSError:
         raise _fail(IO_ERROR) from None
     tmp = Path(tmp_name)
+    # 바이트로 직접 쓴다: 텍스트 모드는 Windows 에서 \n 을 \r\n 으로 바꿔 해시가 실제 파일과 어긋난다. 줄바꿈은 원본 파일을 따른다.
+    payload = (text.replace("\n", "\r\n") if b"\r\n" in current else text).encode("utf-8")
     try:
         try:
-            with os.fdopen(fd, "w", encoding="utf-8") as f:
-                f.write(text)
+            with os.fdopen(fd, "wb") as f:
+                f.write(payload)
                 f.flush()
                 os.fsync(f.fileno())
             try:
@@ -226,4 +228,4 @@ def save_policy_replace(session: PolicyEditSession, new_data: dict) -> EditSaveR
             pass
         except OSError:
             pass
-    return EditSaveResult(path, backup, _digest(text.encode("utf-8")), True)
+    return EditSaveResult(path, backup, _digest(payload), True)
