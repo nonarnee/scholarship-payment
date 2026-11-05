@@ -116,7 +116,7 @@ H1 WINS/WRIS 값 vs 수식 · H2 출력 학번 셀 타입 · H3 사업별 상수
 - 이전 `VALIDATION-AND-TESTS.md`의 "마스킹 예시를 검토 후 저장소에 포함" 문구는 삭제했다(커밋 금지로 통일).
 
 ## 9. 다음 단계 후보 (사용자 승인 필요)
-0. **Phase 5-A 마무리**: 미커밋 변경의 커밋·푸시 → `build-windows.yml` Windows CI 실행(워크플로 개편은 Windows에서 한 번도 실행되지 않음) → PR 생성(병합은 사용자). 이후 Phase 5-B 학교 PC UAT(`docs/UAT-CHECKLIST.md`)는 사용자가 직접 수행. 2026-11-05 로컬 전체 테스트와 공개 안전 검사(작업트리)는 통과했으나 Windows 실행·UAT 전이다.
+0. **Phase 5-A 마무리**: 미커밋 변경의 커밋·푸시 → `build-windows.yml` Windows CI 실행(워크플로 개편은 Windows에서 한 번도 실행되지 않음) → PR 생성(병합은 사용자). 이후 Phase 5-B 학교 PC UAT(`docs/UAT-CHECKLIST.md`)는 사용자가 직접 수행. 2026-11-05 로컬 전체 테스트와 공개 안전 검사(작업트리)는 통과했다. Windows CI 는 처음 두 번 실패(테스트의 설치 가정, PyInstaller 버전 파일 경로)해 수정했고, 세 번째 실행(42019808998)에서 두 잡 모두 성공했다. 이는 합성 데이터 기준 CI 통과일 뿐 학교 PC·Windows Excel·UAT 는 미수행이다.
 1. **사용자 작업**: `private/policy.local.json`의 자리표시자 5개(제목, 근로구분명, 구분코드 2종, 적요)를 채운 뒤 실제 파일로 `--policy` 변환을 실행한다(오류 코드·건수만 확인 가능). 이 값들은 추정하지 않는다(H3).
 2. 블로커 해소: Windows Excel에서 출력 열기(FP-13), 업로드 호환성(H1/H2), 정책 결정(H3·H5, M17~M21).
 3. 비공개 설정(실제 머리글·상수) 주입 형식 설계, 이후 Tkinter GUI·PyInstaller·Actions(각각 승인 필요).
