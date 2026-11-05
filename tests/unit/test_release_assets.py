@@ -10,6 +10,11 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 ASSETS = ROOT / "packaging" / "dist_assets"
 
+needs_qt_installed = pytest.mark.skipif(
+    importlib.util.find_spec("PySide6") is None,
+    reason="PySide6 가 설치된 환경(Qt 빌드 잡)에서만 실제 설치 메타데이터를 검증한다",
+)
+
 
 def _load(path, name):
     spec = importlib.util.spec_from_file_location(name, path)
@@ -89,6 +94,7 @@ def test_notices_cover_every_runtime_requirement_of_the_qt_app():
     assert missing == []                                                           # 의존성이 늘면 고지문 목록도 검토해야 한다
 
 
+@needs_qt_installed
 def test_notices_list_real_installed_versions_and_license_expressions():
     text = notices.render("qt")
     import importlib.metadata as m
@@ -150,6 +156,7 @@ def test_checksums_cover_exe_docs_and_licenses_and_are_verifiable(tmp_path):
         assert hashlib.sha256((d / name).read_bytes()).hexdigest() == digest
 
 
+@needs_qt_installed
 def test_assets_are_copied_without_overwriting_the_exe_and_notices_are_generated(tmp_path):
     d = tmp_path / "app"
     d.mkdir()
@@ -166,6 +173,7 @@ def test_assets_are_copied_without_overwriting_the_exe_and_notices_are_generated
     assert (leg / "README-LEGACY.txt").is_file() and not (leg / "LICENSES" / "LGPL-3.0.txt").exists() or "PySide6" not in (leg / "LICENSES" / "THIRD-PARTY-NOTICES.txt").read_text(encoding="utf-8")
 
 
+@needs_qt_installed
 def test_build_info_carries_commit_when_provided(tmp_path, monkeypatch):
     monkeypatch.setenv("GITHUB_SHA", "0123456789abcdef")
     d = tmp_path / "app"
@@ -375,6 +383,7 @@ def test_workflow_rejects_development_flags_on_the_production_exe_with_exit_code
 
 
 # ---------- 고지문에 라이선스 전문이 실제로 들어가는지 ----------
+@needs_qt_installed
 def test_notices_include_the_real_license_texts_of_every_package_that_ships_them():
     text = notices.render("qt")
     assert "Permission is hereby granted, free of charge" in text                       # MIT 계열 전문(openpyxl 등)
