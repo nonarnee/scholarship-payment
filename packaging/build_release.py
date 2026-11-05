@@ -126,7 +126,8 @@ def main(argv: list[str] | None = None) -> int:
     name = release_info.exe_name(args.kind, version)
     work = Path(args.work)
     work.mkdir(parents=True, exist_ok=True)
-    version_file = work / f"version_info_{args.kind}.txt"
+    # --specpath 가 work 이므로 PyInstaller 는 상대 경로를 work 기준으로 해석한다 → 절대 경로로 넘긴다
+    version_file = (work / f"version_info_{args.kind}.txt").resolve()
     if args.kind in ("qt", "legacy"):
         vi = _load("make_version_info")
         vi_text = vi.render(version, name)

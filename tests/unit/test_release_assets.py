@@ -400,3 +400,17 @@ def test_inventory_flags_notices_that_lack_license_texts(tmp_path):
     d = make_fake_dist(tmp_path / "dist")
     (d / "LICENSES" / "THIRD-PARTY-NOTICES.txt").write_text("x 이 패키지에서 라이선스 파일을 찾지 못했습니다 y", encoding="utf-8")
     assert any("전문" in p for p in inv.inspect(d, "qt", platform="windows", check_pyz=False)["problems"])
+
+
+def test_version_file_is_passed_as_an_absolute_path_because_specpath_is_the_work_dir(tmp_path, monkeypatch):
+    """회귀: 상대 경로를 넘기면 PyInstaller 가 work 기준으로 다시 해석해 build/build/... 를 찾는다."""
+    monkeypatch.chdir(tmp_path)
+    captured = {}
+    monkeypatch.setattr(build.subprocess, "run", lambda cmd, check: captured.setdefault("cmd", cmd))
+    monkeypatch.setattr(build, "install_assets", lambda kind, app_dir: None)
+    monkeypatch.setattr(build, "write_checksums", lambda app_dir, exe: [])
+    assert build.main(["--kind", "legacy"]) == 0
+    cmd = captured["cmd"]
+    vf = Path(cmd[cmd.index("--version-file") + 1])
+    assert vf.is_absolute() and vf.is_file()
+    assert vf.parent == (tmp_path / "build").resolve()
