@@ -242,5 +242,5 @@ class MainWindow(QMainWindow):
                 else:
                     self.step2.enter(self.model.snapshot())
             elif nav.current == Step.RESULT:
-                self.step3.enter(self.step2._selection)  # 확인 결과를 버리지 않고 생성을 시작한다
+                self.step3.enter(self.step2._selection, split=self.step2.split_selected())  # 확인 결과를 버리지 않고 생성을 시작한다
         self._sync_hint()

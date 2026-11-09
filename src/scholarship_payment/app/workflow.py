@@ -128,6 +128,7 @@ def run_prepare(program: str, source_path, template_path, policy_path, base_date
 FOLDER_CODES = frozenset({"OUTPUT_DIR_MISSING", "OUTPUT_PERMISSION", "OUTPUT_IO", "OUTPUT_NAME_EXHAUSTED"})
 KIND_CHANGED, KIND_TEMPLATE, KIND_FOLDER, KIND_VERIFY, KIND_UNEXPECTED = "changed", "template", "folder", "verify", "unexpected"
 TEMP_GLOB = ".~*.xlsx"            # safe_save 가 저장 중 임시로 쓰는 이름(남아 있는 것은 이전 실행이 중단된 흔적일 수 있다)
+RUN_GLOB = ".~run-*"              # 시트별 저장(분리 모드)의 임시 폴더 이름
 
 
 @dataclass(frozen=True, repr=False)
@@ -148,7 +149,9 @@ class FinishOutcome:
     notes: tuple[IssueGroup, ...] = ()
     errors: tuple[IssueGroup, ...] = ()
     changed_codes: dict = field(default_factory=dict)
-    leftover_temp: int = 0                        # 저장 폴더에 이미 있던 `.~*.xlsx` 개수(알리기만 하고 지우지 않는다)
+    leftover_temp: int = 0                        # 저장 폴더에 이미 있던 `.~*.xlsx` 파일과 `.~run-*` 폴더 개수(알리기만 하고 지우지 않는다)
+    split: bool = False                           # 시트별 3개 파일로 저장했는가(output_path 는 그 폴더, output_paths 는 파일 3개)
+    output_paths: tuple[str, ...] = ()
 
     @property
     def name_changed(self) -> bool:
@@ -160,17 +163,18 @@ class FinishOutcome:
 
 def _count_leftover(out_dir) -> int:
     try:
-        return sum(1 for _ in Path(out_dir).glob(TEMP_GLOB))
+        return sum(1 for _ in Path(out_dir).glob(TEMP_GLOB)) + sum(1 for p in Path(out_dir).glob(RUN_GLOB) if p.is_dir())
     except (OSError, TypeError, ValueError):
         return 0
 
 
-def run_finish(prepared: Prepared, out_dir, now=None) -> FinishOutcome:
+def run_finish(prepared: Prepared, out_dir, now=None, split: bool = False) -> FinishOutcome:
     """`convert.finish()` 를 실행하고 결과를 UI 가 다루기 쉬운 분류로 돌려준다. 어떤 예외도 밖으로 내보내지 않고 문구도 남기지 않는다.
     성공 뒤의 크기·시각 측정이 실패해도 성공은 그대로다(후속 표시 오류를 생성 실패로 분류하지 않는다)."""
-    common = dict(requested_name=prepared.filename, count=prepared.count, total_amount=prepared.total_amount, template_name=Path(prepared._template_path).name)
+    common = dict(requested_name=Path(prepared.filename).stem if split else prepared.filename, count=prepared.count, total_amount=prepared.total_amount,
+                  template_name=Path(prepared._template_path).name, split=split)
     try:
-        res = finish(prepared, out_dir)
+        res = finish(prepared, out_dir, split=True) if split else finish(prepared, out_dir)
     except ConversionFailed as e:
         if e.stage == "changed":
             return FinishOutcome("changed", KIND_CHANGED, errors=group_issues(e.errors, "error"), changed_codes={x.field: x.code for x in e.errors}, **common)
@@ -185,14 +189,14 @@ def run_finish(prepared: Prepared, out_dir, now=None) -> FinishOutcome:
     except Exception:                                                    # 예외 문구에는 경로가 들어갈 수 있어 종류만 분류한다
         return FinishOutcome("failed", KIND_UNEXPECTED, leftover_temp=_count_leftover(out_dir), **common)
     try:
-        size = os.stat(res.output_path).st_size
+        size = sum(os.stat(p).st_size for p in res.output_paths) if split else os.stat(res.output_path).st_size
     except Exception:
         size = None
     try:
         finished_at = (now or datetime.now)().strftime("%Y-%m-%d %H:%M:%S")
     except Exception:
         finished_at = None
-    return FinishOutcome("ok", None, output_path=os.fspath(res.output_path), size_bytes=size, finished_at=finished_at,
+    return FinishOutcome("ok", None, output_path=os.fspath(res.output_path), output_paths=tuple(map(os.fspath, res.output_paths)) if split else (), size_bytes=size, finished_at=finished_at,
                          warnings=group_issues(res.warnings, "warning"), notes=group_issues(res.notes, "note"),
                          leftover_temp=_count_leftover(out_dir), **common)
 

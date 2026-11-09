@@ -30,6 +30,7 @@ class GenerationSession:
         self._prepared = None            # 같은 Prepared 로 재시도할 수 있는 실패(folder)에서만 보관한다
         self._rejected = None            # 더 이상 쓸 수 없는 Prepared(참조만 보관해 같은 것을 다시 받지 않는다)
         self.out_dir: str | None = None
+        self.split = False               # 시트별 3개 파일 저장 여부(이번 실행의 선택; 폴더 오류 재시도에서도 유지)
         self.outcome: workflow.FinishOutcome | None = None
         self.failure_kind: str | None = None
         self.state = IDLE
@@ -59,11 +60,12 @@ class GenerationSession:
         return self.state == FAILED and self.failure_kind == KIND_FOLDER and self._prepared is not None
 
     # --- 실행 ---
-    def start(self, prepared, out_dir) -> bool:
+    def start(self, prepared, out_dir, split: bool = False) -> bool:
         """생성을 시작한다. 처리 중이거나 이미 성공했거나 이미 쓸 수 없게 된 Prepared 면 무시하고 False."""
         if self._closed or self.state == GENERATING or self.done or prepared is None or prepared is self._rejected or prepared is self._prepared:
             return False
         self._rejected = None
+        self.split = bool(split)
         self._begin(prepared, out_dir)
         return True
 
@@ -89,11 +91,11 @@ class GenerationSession:
         self._prepared = prepared
         self.out_dir = str(out_dir)
         self.outcome, self.failure_kind = None, None
-        finish_fn, now, folder = self._finish_fn, self._now, self.out_dir
+        finish_fn, now, folder, split = self._finish_fn, self._now, self.out_dir, self.split
 
         def job():
             try:
-                return finish_fn(prepared, folder, now)
+                return finish_fn(prepared, folder, now, split=True) if split else finish_fn(prepared, folder, now)
             except Exception:
                 return None                           # 작업 안의 예상 밖 예외: 문구는 버리고 _done 이 '예기치 않은 오류'로 정리한다
 
@@ -128,7 +130,7 @@ class GenerationSession:
             return False
         self._token += 1
         self._prepared = self._rejected = None
-        self.outcome, self.failure_kind, self.out_dir = None, None, None
+        self.outcome, self.failure_kind, self.out_dir, self.split = None, None, None, False
         self._set(IDLE)
         return True
 
