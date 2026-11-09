@@ -111,8 +111,8 @@ def test_layout_merge_fingerprint(make_mc_input):
     assert any(c == "LAYOUT_MERGE" for c, _ in fail(make_mc_input(n=1, mutate=lambda ws: ws.unmerge_cells("H1:L1"))))
 
 
-def test_wrong_sheet_and_missing_total(make_mc_input):
-    assert fail(make_mc_input(n=1, mutate=lambda ws: setattr(ws, "title", "다른"))) == [("SHEET_MISSING", None)]
+def test_sheet_name_is_not_a_criterion_and_missing_total_is_blocked(make_mc_input):
+    assert len(read(make_mc_input(n=1, mutate=lambda ws: setattr(ws, "title", "다른"))).batch.rows) == 1       # 시트명이 달라도 구조가 맞으면 읽는다
     assert fail(make_mc_input(n=1, mutate=lambda ws: ws.__setitem__("A5", "x"))) == [("TOTAL_ROW_MISSING", None)]
 
 

@@ -1,6 +1,7 @@
 """다문화·탈북학생 멘토링 `월별지급부현황` 입력 Adapter.
 
-입력은 재단 원본을 그대로 읽는다. 대청교와 달리 **학생 단위 묶음 + 소계 행** 구조다.
+입력은 재단 원본을 그대로 읽는다. 데이터 시트는 시트명이 아니라 구조(머리글 텍스트·위치, 병합)로 찾는다: 구조가 일치하는 시트가 정확히 1개일 때만 쓰고,
+없거나 2개 이상이면 차단한다(`adapters.sheets`). 대청교와 달리 **학생 단위 묶음 + 소계 행** 구조다.
 - 데이터 행(B열 순번이 정수)들 뒤에 `소계` 행이 오고, 마지막에 `합계` 행이 있다.
 - 한 묶음(데이터 행 1개 이상 + 소계 1개)은 한 학생이다. 기관 변경이나 이월(누적 10시간 미만이던 금액이 이번 달에 지급)로
   데이터 행이 둘 이상일 수 있다. 결과는 **학생당 1행**: 시간·금액은 묶음 합계, 그 밖의 항목은 **맨 위 행**(최근 활동기관)의 값.
@@ -23,12 +24,12 @@ from openpyxl import load_workbook
 
 from scholarship_payment.adapters.base import AdapterResult, InputValidationFailed, SourceTotals
 from scholarship_payment.adapters.daechung import _blank, _norm, _text
+from scholarship_payment.adapters.sheets import select_data_sheet
 from scholarship_payment.adapters.source import open_source
 from scholarship_payment.core.normalize import normalize_account, normalize_identifier, parse_amount, parse_hours
 from scholarship_payment.errors import ValidationError
 from scholarship_payment.models.payment import PaymentBatch, PaymentRow
 
-SHEET_NAME = "월별지급부현황"
 FIRST_DATA_ROW = 3
 LAST_COLUMN = 18            # R
 EXPECTED_HEADERS = {
@@ -62,17 +63,17 @@ class MulticulturalAdapter:
             raise InputValidationFailed([ValidationError("POLICY_RATES_MISSING", "hourly_rates")])
         wb = self._open(Path(path), password)
         try:
-            if SHEET_NAME not in wb.sheetnames:
-                raise InputValidationFailed([ValidationError("SHEET_MISSING", "sheet")])
-            ws = wb[SHEET_NAME]
-            errors = [ValidationError("LAYOUT_HEADER", c) for c, h in EXPECTED_HEADERS.items() if _norm(ws[c].value) != h]
-            merged = {str(m) for m in ws.merged_cells.ranges}
-            errors += [ValidationError("LAYOUT_MERGE", r) for r in REQUIRED_MERGES if r not in merged]
-            if errors:
-                raise InputValidationFailed(errors)
+            ws = select_data_sheet(wb, self._check_layout)      # 구조가 맞는 시트가 정확히 1개일 때만
             return self._read_data(ws)
         finally:
             wb.close()
+
+    @staticmethod
+    def _check_layout(ws) -> list[ValidationError]:
+        errors = [ValidationError("LAYOUT_HEADER", c) for c, h in EXPECTED_HEADERS.items() if _norm(ws[c].value) != h]
+        merged = {str(m) for m in ws.merged_cells.ranges}
+        errors += [ValidationError("LAYOUT_MERGE", r) for r in REQUIRED_MERGES if r not in merged]
+        return errors
 
     @staticmethod
     def _open(path: Path, password):
