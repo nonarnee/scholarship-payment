@@ -101,8 +101,9 @@ def test_not_an_excel_file(tmp_path):
     assert triples(errors_of(p)) == {("FILE_UNREADABLE", "file", None)}
 
 
-def test_sheet_missing(make_input):
-    assert triples(errors_of(make_input(mutate=lambda ws: setattr(ws, "title", "다른시트")))) == {("SHEET_MISSING", "sheet", None)}
+def test_sheet_name_is_not_a_criterion(make_input, fixture_45):
+    """시트명은 판단 기준이 아니다: 이름이 달라도 구조가 맞으면 같은 결과다(자세한 경계는 test_source_sheet_detection.py)."""
+    assert read(make_input(mutate=lambda ws: setattr(ws, "title", "다른시트"))).batch == read(fixture_45).batch
 
 
 def test_changed_header_is_rejected_not_guessed(make_input):

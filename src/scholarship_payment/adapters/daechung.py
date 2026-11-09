@@ -1,7 +1,8 @@
 """대청교 `월별지급승인` 입력 Adapter.
 
 입력은 재단에서 내려받은 원본 파일을 **그대로** 읽는다(사용자가 고치지 않는다는 전제).
-- 레이아웃 지문(시트명, 헤더 텍스트, 병합)이 다르면 열 번호를 적용하지 않고 차단한다.
+- 데이터 시트는 시트명이 아니라 구조(머리글 텍스트·위치, 병합)로 찾는다: 구조가 일치하는 시트가 정확히 1개일 때만 쓰고, 없거나 2개 이상이면 차단한다(`adapters.sheets`).
+- 레이아웃 지문(헤더 텍스트, 병합)이 다르면 열 번호를 적용하지 않고 차단한다.
 - `A·B·V·W·X` 열은 읽지 않으며 지급 대상자 필터에 쓰지 않는다(결정).
 - 중복 학번·0원·음수·대상자 0명 같은 업무 규칙은 판단하지 않는다(OPEN H5·M10). 0명은 배치를 만들 수 없어 차단한다.
 - 원본은 읽기만 한다(저장하지 않음).
@@ -19,12 +20,12 @@ from pathlib import Path
 from openpyxl import load_workbook
 
 from scholarship_payment.adapters.base import AdapterResult, InputValidationFailed, SourceTotals
+from scholarship_payment.adapters.sheets import select_data_sheet
 from scholarship_payment.adapters.source import open_source
 from scholarship_payment.core.normalize import normalize_account, normalize_identifier, parse_amount, parse_hours
 from scholarship_payment.errors import ValidationError
 from scholarship_payment.models.payment import PaymentBatch, PaymentRow
 
-SHEET_NAME = "월별지급승인"
 FIRST_DATA_ROW = 3
 LAST_COLUMN = 24            # X
 # 레이아웃 지문: 좌표 -> 기대 텍스트(공백 제거 후 비교). 머리글이 병합된 칸은 좌상단 셀만 지문으로 쓴다.
@@ -79,12 +80,7 @@ class DaechungAdapter:
     def read(self, path: str | Path, password: str | None = None) -> AdapterResult:
         wb = self._open(Path(path), password)
         try:
-            if SHEET_NAME not in wb.sheetnames:
-                raise InputValidationFailed([ValidationError("SHEET_MISSING", "sheet")])
-            ws = wb[SHEET_NAME]
-            layout = self._check_layout(ws)
-            if layout:
-                raise InputValidationFailed(layout)       # 레이아웃이 틀리면 데이터를 해석하지 않는다
+            ws = select_data_sheet(wb, self._check_layout)      # 구조가 맞는 시트가 정확히 1개일 때만. 레이아웃이 틀리면 데이터를 해석하지 않는다
             return self._read_data(ws)
         finally:
             wb.close()
