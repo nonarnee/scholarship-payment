@@ -26,11 +26,11 @@ from scholarship_payment.adapters.multicultural import MulticulturalAdapter
 from scholarship_payment.config.policy import SYNTHETIC_POLICY, OutputPolicy
 from scholarship_payment.core.bank_codes import BankCodeTable
 from scholarship_payment.errors import ValidationError, ValidationFailed
-from scholarship_payment.io.safe_save import save_new
+from scholarship_payment.io.safe_save import save_new, save_set
 from scholarship_payment.adapters.base import SourceTotals
 from scholarship_payment.validation.validator import ValidatedBatch, validate
-from scholarship_payment.writers.output_check import verify_output
-from scholarship_payment.writers.template_writer import build_workbook
+from scholarship_payment.writers.output_check import verify_output, verify_split_set
+from scholarship_payment.writers.template_writer import SPLIT_KINDS, SPLIT_SUFFIX, build_single_sheet_workbook, build_workbook
 
 AI_HOURLY_RATE = 18000        # AI멘토링 시급 고정(사용자 결정 2026-11-04)
 
@@ -191,6 +191,7 @@ class ConvertResult:
     count: int
     warnings: tuple[ValidationError, ...]
     notes: tuple[ValidationError, ...] = ()
+    output_paths: tuple[Path, ...] = ()       # 통합본: (output_path,) / 분리 모드: 명단·WINS·WRIS 파일 3개(output_path 는 그 폴더)
 
 
 def prepare(program: str, input_path, template_path, policy: OutputPolicy = SYNTHETIC_POLICY,
@@ -245,9 +246,10 @@ def prepare(program: str, input_path, template_path, policy: OutputPolicy = SYNT
     )
 
 
-def finish(prepared: Prepared, out_dir) -> ConvertResult:
+def finish(prepared: Prepared, out_dir, split: bool = False) -> ConvertResult:
     """파일 변경 확인 → Workbook 생성(템플릿 레이아웃 검증 포함) → 출력 재검증 → 안전 저장.
-    입력이 하나라도 바뀌었으면 아무 것도 만들지 않고 `ConversionFailed(stage="changed")` 로 멈춘다(자동으로 다시 읽지 않는다)."""
+    입력이 하나라도 바뀌었으면 아무 것도 만들지 않고 `ConversionFailed(stage="changed")` 로 멈춘다(자동으로 다시 읽지 않는다).
+    `split=True` 이면 통합본 대신 명단·WINS·WRIS 를 각각 1개 시트 파일로 만들어 새 하위 폴더 하나에 공개한다(전부 검증을 통과해야만 공개)."""
     try:
         data = Path(prepared._template_path).read_bytes()
         template_probe = (fingerprint_bytes(data).sha256, "ok")
@@ -258,6 +260,19 @@ def finish(prepared: Prepared, out_dir) -> ConvertResult:
     problems = _diagnose(prepared, template_probe)
     if problems:
         raise ConversionFailed([ValidationError(code, name) for name, code in problems.items()], "changed")
+    to_error = lambda i: ValidationError(i.code, i.field, i.row)  # noqa: E731
+    warnings, notes = tuple(map(to_error, prepared.warnings)), tuple(map(to_error, prepared.notes))
+    if split:
+        try:
+            books = {k: build_single_sheet_workbook(prepared._validated, BytesIO(data), prepared.policy, prepared.base_date, k) for k in SPLIT_KINDS}   # 해시를 확인한 바이트를 파일마다 새로 읽는다
+        except ValidationFailed as e:
+            raise ConversionFailed(e.errors, "template") from None
+        try:
+            folder, files = save_set(books, out_dir, Path(prepared.filename).stem, SPLIT_SUFFIX,
+                                     lambda paths: verify_split_set(paths, prepared._validated, prepared._source_totals))
+        except ValidationFailed as e:
+            raise ConversionFailed(e.errors, "output") from None
+        return ConvertResult(output_path=folder, count=prepared.count, warnings=warnings, notes=notes, output_paths=tuple(files[k] for k in SPLIT_KINDS))
     try:
         wb = build_workbook(prepared._validated, BytesIO(data), prepared.policy, prepared.base_date)   # 해시를 확인한 바로 그 바이트
     except ValidationFailed as e:
@@ -266,8 +281,7 @@ def finish(prepared: Prepared, out_dir) -> ConvertResult:
         path = save_new(wb, out_dir, prepared.filename, lambda tmp: verify_output(tmp, prepared._validated, prepared._source_totals))
     except ValidationFailed as e:
         raise ConversionFailed(e.errors, "output") from None
-    to_error = lambda i: ValidationError(i.code, i.field, i.row)  # noqa: E731
-    return ConvertResult(output_path=path, count=prepared.count, warnings=tuple(map(to_error, prepared.warnings)), notes=tuple(map(to_error, prepared.notes)))
+    return ConvertResult(output_path=path, count=prepared.count, warnings=warnings, notes=notes, output_paths=(path,))
 
 
 def convert(program: str, input_path, out_dir, template_path, policy: OutputPolicy = SYNTHETIC_POLICY,

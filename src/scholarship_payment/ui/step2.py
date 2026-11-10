@@ -8,7 +8,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QLineEdit, QProgressBar, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QCheckBox, QFrame, QHBoxLayout, QLabel, QLineEdit, QProgressBar, QVBoxLayout, QWidget
 
 from scholarship_payment.ui import issue_text, preview as pv
 from scholarship_payment.ui.settings_dialog import PROGRAM_LABELS  # noqa: F401  (사업 코드 순서)
@@ -167,6 +167,12 @@ class Step2Page(QWidget):
             card.body.addWidget(label)
             scope.addWidget(card, 1)
         rl.addLayout(scope)
+        self.split_check = QCheckBox("명단·WINS·WRIS를 시트별 3개 파일로 따로 저장")       # 기본은 꺼짐(통합 1개 파일). 새 하위 폴더 하나에 3개를 만든다.
+        self.split_hint = QLabel("선택하면 저장 폴더 안에 새 폴더를 만들고 그 안에 파일 3개를 저장합니다. 세 파일을 모두 검증한 뒤에만 공개하며, 은행코드 시트는 넣지 않습니다.")
+        self.split_hint.setWordWrap(True)
+        self.split_hint.setProperty("role", "hint")
+        rl.addWidget(self.split_check)
+        rl.addWidget(self.split_hint)
         root.addWidget(self.result_box)
 
         # 오류·경고·참고
@@ -194,6 +200,9 @@ class Step2Page(QWidget):
         self._render()
 
     # --- 동작 ---
+    def split_selected(self) -> bool:
+        return self.split_check.isChecked()
+
     def enter(self, selection, resume: bool = False) -> None:
         """Step 2 로 들어온다. resume=True(Step 3 에서 돌아옴)이면 이미 있는 확인 결과를 그대로 보여 주고 다시 읽지 않는다(변경 감지만 한다)."""
         self._selection = selection
@@ -207,6 +216,7 @@ class Step2Page(QWidget):
         self.password_edit.clear()
         self.session.discard()
         self._selection = None
+        self.split_check.setChecked(False)         # 새 변환은 항상 기본(통합 1개 파일)에서 시작한다
 
     def refresh_freshness(self) -> None:
         self.session.verify_fresh()

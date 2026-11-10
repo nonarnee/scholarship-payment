@@ -22,6 +22,8 @@ from scholarship_payment.validation.validator import ValidatedBatch
 
 LIST_PREFIX = "지급대상자명단("
 WINS, WRIS = "WINS", "WRIS"
+SPLIT_KINDS = ("list", "wins", "wris")                       # 시트별 파일 저장(분리 모드)의 종류
+SPLIT_SUFFIX = {"list": "명단", "wins": "WINS", "wris": "WRIS"}
 LIST_FIRST = 5                  # 명단 첫 데이터 행
 SIDE_FIRST = 2                  # WINS/WRIS 첫 데이터 행
 LIST_COLS, WINS_COLS, WRIS_COLS = 17, 9, 10
@@ -191,4 +193,20 @@ def build_workbook(validated: ValidatedBatch, template_path: str | Path, policy:
             for col, v in values.items():
                 _put(sheet, f"{col}{r}", v)
         _reset_conditional_format(sheet, rule, f"{id_col}{SIDE_FIRST}:{id_col}{SIDE_FIRST + n - 1}")
+    return wb
+
+
+def build_single_sheet_workbook(validated: ValidatedBatch, template_path, policy: OutputPolicy, base_date: str | None, kind: str):
+    """분리 모드용: 통합본과 **같은 방식으로** 만든 Workbook 에서 `kind`(list/wins/wris) 시트 하나만 남긴다(은행코드 시트 포함 나머지는 제거).
+    파일마다 새로 호출해야 한다(같은 Workbook 재사용 금지). 템플릿 서식·열 너비·행 높이는 통합본의 해당 시트와 같다."""
+    if kind not in SPLIT_KINDS:
+        raise ValueError("kind")
+    wb = build_workbook(validated, template_path, policy, base_date)
+    keep = wb[next(s for s in wb.sheetnames if s.startswith(LIST_PREFIX))].title if kind == "list" else (WINS if kind == "wins" else WRIS)
+    removed = [n for n in wb.sheetnames if n != keep]
+    for name in removed:
+        wb.remove(wb[name])
+    for key in [k for k, dn in wb.defined_names.items() if any(f"{n}!" in (dn.attr_text or "") or f"'{n}'!" in (dn.attr_text or "") for n in removed)]:
+        del wb.defined_names[key]                       # 지운 시트를 가리키는 통합 문서 이름은 깨진 참조가 되므로 함께 지운다
+    wb.active = 0
     return wb

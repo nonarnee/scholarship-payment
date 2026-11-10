@@ -69,7 +69,7 @@ class Step3Page(QWidget):
         self.result_badge = Badge("", "verified")
         rl.addWidget(self.result_badge, 0, Qt.AlignmentFlag.AlignLeft)
         file_card = Card()
-        cap = QLabel("저장된 파일")
+        cap = self.file_cap = QLabel("저장된 파일")
         cap.setProperty("role", "hint")
         self.file_name_value = QLabel("")
         self.file_name_value.setProperty("role", "headline")
@@ -174,12 +174,12 @@ class Step3Page(QWidget):
         self._render()
 
     # --- 시작 · 동작 ---
-    def enter(self, selection) -> None:
+    def enter(self, selection, split: bool = False) -> None:
         """Step 2 에서 '지급명단 생성'으로 들어왔다. 확인 결과(`Prepared`)가 있으면 생성을 시작한다(이미 진행·완료·실패한 것이면 시작하지 않고 보여 주기만 한다)."""
         self._selection = selection
         prepared = self.preview.prepared
         if prepared is not None and selection is not None:
-            self.generation.start(prepared, selection.out_dir)
+            self.generation.start(prepared, selection.out_dir, split)
         self._render()
 
     def show_close_blocked(self) -> None:
@@ -192,7 +192,9 @@ class Step3Page(QWidget):
 
     def _open_folder(self) -> None:
         out = self._output()
-        ok = bool(out) and self.ctx.system_actions.open_folder(Path(out).parent)
+        o = self.generation.outcome
+        target = Path(out) if out and o is not None and o.split else (Path(out).parent if out else None)      # 분리 저장은 새로 만든 폴더 자체를 연다
+        ok = bool(out) and self.ctx.system_actions.open_folder(target)
         self.action_status.setText("" if ok else "폴더를 열지 못했습니다. 저장 위치의 경로를 직접 여세요.")      # 폴더 열기 실패는 생성 실패가 아니다
 
     def _copy_path(self) -> None:
@@ -246,17 +248,24 @@ class Step3Page(QWidget):
         self.result_badge.setText("저장·출력 재검증 통과" + (f" (경고 {warn}종)" if warn else ""))
         self.result_badge.set_kind("caution" if warn else "verified")
         p = Path(o.output_path)
-        self.file_name_value.setText(p.name)
+        if o.split:
+            self.file_cap.setText("저장된 폴더(시트별 파일 3개)")
+            self.file_name_value.setText(p.name + "\n" + "\n".join(Path(x).name for x in o.output_paths))
+        else:
+            self.file_cap.setText("저장된 파일")
+            self.file_name_value.setText(p.name)
         self.folder_value.set_full_text(str(p.parent))
-        self.name_notice.setText("같은 이름의 파일이 이미 있어 다른 이름으로 저장했습니다. 기존 파일은 그대로 있습니다." if o.name_changed else "")
+        what = "폴더" if o.split else "파일"
+        self.name_notice.setText(f"같은 이름의 {what}가 이미 있어 다른 이름으로 저장했습니다. 기존 {what}는 그대로 있습니다." if o.name_changed else "")
         self.name_notice.setVisible(o.name_changed)
-        self.verify_label.setText("출력 재검증 통과: 저장하기 전에 만든 파일을 다시 읽어 지급 데이터와 대조했습니다.")
+        self.verify_label.setText("출력 재검증 통과: 저장하기 전에 만든 세 파일을 각각 다시 읽어 지급 데이터와 대조하고, 세 파일끼리도 서로 대조했습니다." if o.split
+                                  else "출력 재검증 통과: 저장하기 전에 만든 파일을 다시 읽어 지급 데이터와 대조했습니다.")
         self.count_value.setText(f"{o.count}명")
         self.total_value.setText(f"{o.total_amount:,}원")
         self.size_value.setText(status_view.human_size(o.size_bytes) if o.size_bytes is not None else "확인하지 못함")
         self.time_value.setText(o.finished_at or "확인하지 못함")
         self.template_value.setText(o.template_name)
-        self.leftover_notice.setText(f"저장 폴더에 이전 실행에서 남은 것으로 보이는 임시 파일(.~로 시작하는 .xlsx)이 {o.leftover_temp}개 있습니다. 자동으로 지우지 않으니 필요하면 직접 정리하세요."
+        self.leftover_notice.setText(f"저장 폴더에 이전 실행에서 남은 것으로 보이는 임시 항목(.~로 시작하는 .xlsx 파일 또는 .~run- 폴더)이 {o.leftover_temp}개 있습니다. 자동으로 지우지 않으니 필요하면 직접 정리하세요."
                                      if o.leftover_temp else "")
         self.leftover_notice.setVisible(bool(o.leftover_temp))
         self.action_status.setText("")

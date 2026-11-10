@@ -83,7 +83,8 @@ def test_public_signatures_keep_the_old_contract():
     params = list(inspect.signature(convert).parameters)
     assert params == ["program", "input_path", "out_dir", "template_path", "policy", "base_date", "today", "password"]
     assert "out_dir" not in inspect.signature(prepare).parameters                  # 미리보기에는 저장 위치 개념이 없다
-    assert list(inspect.signature(finish).parameters) == ["prepared", "out_dir"]
+    assert list(inspect.signature(finish).parameters) == ["prepared", "out_dir", "split"]
+    assert inspect.signature(finish).parameters["split"].default is False             # 시트별 저장은 선택 사항이며 기본은 기존과 같은 통합 1개 파일
 
 
 # ---------- prepare(): 파일을 만들지 않고 입력을 바꾸지 않는다 ----------
